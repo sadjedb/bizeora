@@ -1,0 +1,19 @@
+.next
+.next-dev
+node_modules
+out
+coverage
+playwright-report
+test-results
+package-lock.json
+next-env.d.ts
+
+# Locked documentation — content is the source of truth and is maintained by
+# hand. Prettier reflows markdown tables, which produces noisy diffs on files
+# that are reviewed for meaning rather than formatting.
+docs/
+tasks/
+AGENTS.md
+CLAUDE.md
+src/generated
+prisma/migrations

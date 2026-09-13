@@ -1,0 +1,54 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next
+/.next/
+/.next-dev
+/out/
+next-env.d.ts
+
+# production
+/build
+/dist
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# editors and os
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+
+# misc
+*.pem
+.vercel
+*.tsbuildinfo
+.eslintcache
+
+# generated Prisma client
+/src/generated
+
+# local object storage (uploaded photographs in development)
+/.storage
+
+# generated local archive
+/.next-dev.zip

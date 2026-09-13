@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  validate:
+    name: Validate (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.19 is what the project is developed on today; 22 is the active LTS
+        # and the intended production runtime. Both are validated so the
+        # upgrade is a configuration change rather than a discovery.
+        node: ['20.19', '22']
+
+    services:
+      postgres:
+        # uuidv7() requires PostgreSQL 18 or newer (prisma/schema.prisma).
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stitch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stitch_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/stitch_test?schema=public
+      NEXT_PUBLIC_SITE_URL: https://example.com
+      # Not a secret: CI has no real users and no real sessions. A literal keeps
+      # the workflow reproducible, and the value never leaves the runner. The
+      # deployed environments read a real 32-byte CSPRNG value from their secret
+      # store (docs/SECURITY.md section 2.1).
+      BETTER_AUTH_SECRET: ci-only-not-a-real-secret-0123456789abcdef
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `postinstall` runs `prisma generate`, so the client exists from here on.
+      - name: Install
+        run: npm ci
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Migrate (from an empty database)
+        run: npm run db:migrate
+
+      - name: Seed
+        run: npm run db:seed
+
+      - name: Seed is idempotent
+        run: npm run db:seed
+
+      - name: Unit tests
+        run: npx vitest run tests/unit
+
+      - name: Database and authentication tests
+        run: npm run test:db
+
+      - name: Build
+        run: npm run build

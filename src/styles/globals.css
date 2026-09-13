@@ -1,0 +1,117 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/*
+ * Base layer.
+ *
+ * Only what every page needs. Component styling lives with components
+ * (Phase 4); this file must not grow into a stylesheet.
+ */
+
+/*
+ * Duration utilities.
+ *
+ * Tailwind v4 has no `--duration-*` theme namespace: `duration-*` accepts bare
+ * numbers and arbitrary values only, so `duration-fast` would silently compile
+ * to nothing and every transition would fall back to the framework default.
+ * These four map the documented motion tokens (DESIGN-SYSTEM.md section 10)
+ * onto real utilities, so a component can name a duration instead of repeating
+ * a magic number.
+ */
+@utility duration-instant {
+  transition-duration: var(--duration-instant);
+}
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}
+@utility duration-reveal {
+  transition-duration: var(--duration-reveal);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* The display serif carries headings; docs/DESIGN-SYSTEM.md section 3. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Focus is always visible. Removing an outline without a replacement is
+   * prohibited — docs/DESIGN-SYSTEM.md section 14. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* Form controls are 16px on mobile so iOS does not zoom on focus. */
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  /* Skip link: visible only when focused. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+  }
+
+  .skip-link:focus {
+    left: calc(var(--spacing) * 4);
+    top: calc(var(--spacing) * 4);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+    background-color: var(--color-fg);
+    color: var(--color-fg-on-dark);
+    border-radius: var(--radius-md);
+  }
+}
+
+/*
+ * Reduced motion is honoured globally, at the token level, so no component
+ * can opt out — docs/DESIGN-SYSTEM.md section 10.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
