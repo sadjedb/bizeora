@@ -134,7 +134,7 @@ export default async function GalleryPage({
   });
 
   const [items, facets] = await Promise.all([
-    listGalleryItems({ filters }),
+    listGalleryItems({ filters, locale }),
     listGalleryFacets(),
   ]);
 

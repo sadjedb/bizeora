@@ -22,6 +22,7 @@
 
 export type HomepageSectionType =
   | 'HERO'
+  | 'MARQUEE'
   | 'CATEGORY_GRID'
   | 'HOW_IT_WORKS'
   | 'CUSTOM_CTA'
@@ -33,9 +34,10 @@ export type HomepageSectionType =
   | 'BANNER'
   | 'FINAL_CTA';
 
-/** The eleven members of the database enum, in their declaration order. */
+/** The twelve members of the database enum, in their declaration order. */
 export const HOMEPAGE_SECTION_TYPES: readonly HomepageSectionType[] = [
   'HERO',
+  'MARQUEE',
   'CATEGORY_GRID',
   'HOW_IT_WORKS',
   'CUSTOM_CTA',
@@ -274,6 +276,52 @@ export function whyUsConfig(config: unknown): WhyUsConfig {
 }
 
 /* ---------------------------------------------------------------------------
+ * The marquee
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The most words a marquee may carry.
+ *
+ * The strip renders its content twice to make the loop seamless, and its
+ * duration scales with the text, so a band with fifty phrases in it is both a
+ * very long DOM and a strip that takes two minutes to come round. Twelve is
+ * more than any real one needs.
+ */
+export const MAX_MARQUEE_WORDS = 12;
+
+/** The most characters one phrase may be. It is a strip, not a sentence. */
+const MAX_MARQUEE_WORD_LENGTH = 48;
+
+export type MarqueeConfig = { words: readonly string[] };
+
+/**
+ * The marquee's phrases, one per line.
+ *
+ * **One `longText` field split on newlines, rather than a repeater control.**
+ * The admin's form generator already has a textarea, and a marquee is a list of
+ * three-word phrases: a dedicated editor with an add button and a delete button
+ * per row would be more code and worse to type into. One per line is also how
+ * somebody would write the list down on paper.
+ *
+ * Blank lines are dropped rather than rendered, because a trailing newline is
+ * what a textarea gives you for free and an empty item in the strip is a gap
+ * nobody can explain.
+ */
+export function marqueeConfig(config: unknown): MarqueeConfig {
+  const raw = record(config).words;
+  if (typeof raw !== 'string') return { words: [] };
+
+  const words = raw
+    .split('\n')
+    .map((word) => word.trim())
+    .filter((word) => word !== '')
+    .map((word) => word.slice(0, MAX_MARQUEE_WORD_LENGTH))
+    .slice(0, MAX_MARQUEE_WORDS);
+
+  return { words };
+}
+
+/* ---------------------------------------------------------------------------
  * What each enabled section needs loading
  * ------------------------------------------------------------------------ */
 
@@ -354,4 +402,77 @@ export function activeBanners(banners: readonly Banner[], now: Date): readonly B
     )
     .slice()
     .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+}
+
+/* -------------------------------------------------------------------------
+ * The accented word
+ * ---------------------------------------------------------------------- */
+
+/**
+ * One segment of a heading: a run of plain text, or the emphasised run.
+ */
+export type HeadingSegment = { text: string; accent: boolean };
+
+/**
+ * Split a heading on its `*emphasised*` word.
+ *
+ * `DESIGN-SYSTEM.md` section 3 makes one word per headline the storefront's
+ * loudest typographic move — set in italic with Fraunces' `WONK` axis, in the
+ * accent colour. The question this function answers is *which* word, and the
+ * answer has to be **content**, not code: the headings live in
+ * `homepage_sections` and are written by the owner, in two languages, and the
+ * emphasised word is rarely in the same position in both. "Vos idées,
+ * *brodées*." and "Your idea, *embroidered*." do not agree about which word is
+ * last, let alone which is third.
+ *
+ * So the convention is a single pair of asterisks, the one piece of markup this
+ * system has:
+ *
+ *     Vos idées, *brodées.*   ->   [ 'Vos idées, ', accent 'brodées.' ]
+ *
+ * Deliberately **not** Markdown. Nothing else is interpreted — no bold, no
+ * links, no lists — because a heading field that renders arbitrary markup is a
+ * heading field somebody eventually puts an image in. One pair of asterisks, one
+ * emphasis, everything else literal.
+ *
+ * A heading with no asterisks, an unclosed pair, or an empty `**` comes back as
+ * a single plain segment, so a typo degrades to the heading as typed rather
+ * than to a broken page or a stray asterisk.
+ */
+export function headingSegments(value: string | null): readonly HeadingSegment[] {
+  if (!value) return [];
+
+  const open = value.indexOf('*');
+  if (open === -1) return [{ text: value, accent: false }];
+
+  const close = value.indexOf('*', open + 1);
+  // An unclosed asterisk is a typo, not markup. Show what was typed.
+  if (close === -1) return [{ text: value, accent: false }];
+
+  const accent = value.slice(open + 1, close);
+  if (accent.trim() === '') return [{ text: value, accent: false }];
+
+  return [
+    { text: value.slice(0, open), accent: false },
+    { text: accent, accent: true },
+    { text: value.slice(close + 1), accent: false },
+    // A heading is "word *word*" far more often than "*word* word", so the
+    // empty outer segments are common and must not render as empty elements.
+  ].filter((segment) => segment.text !== '');
+}
+
+/**
+ * The heading with its markup removed.
+ *
+ * For anywhere a heading is a *string* rather than a rendering — a `title`
+ * attribute, an `aria-label`, metadata, structured data. Emitting
+ * "Vos idées, *brodées.*" into a `<title>` would put an asterisk in a search
+ * result.
+ */
+export function plainHeading(value: string | null): string | null {
+  if (!value) return null;
+
+  return headingSegments(value)
+    .map((segment) => segment.text)
+    .join('');
 }

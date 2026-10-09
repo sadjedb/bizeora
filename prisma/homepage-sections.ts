@@ -39,7 +39,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
     type: HomepageSectionType.HERO,
     position: 2,
     isEnabled: true,
-    title: 'Vos idées, brodées.',
+    title: 'Vos idées, *brodées.*',
     body: 'Envoyez un logo, un prénom ou un dessin : nous le brodons sur le vêtement de votre choix. Ou choisissez une pièce déjà brodée dans la boutique.',
     ctaLabel: 'Créer ma broderie',
     ctaHref: '/custom',
@@ -55,7 +55,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
       // the picture would only repeat it (DESIGN-SYSTEM.md section 14).
       imageAlt: '',
       en: {
-        title: 'Your idea, embroidered.',
+        title: 'Your idea, *embroidered.*',
         body: 'Send us a logo, a name or a drawing: we embroider it on the garment you choose. Or pick a piece we have already embroidered from the shop.',
         ctaLabel: 'Start my embroidery',
         eyebrow: 'Embroidery workshop · Algeria',
@@ -65,10 +65,47 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
     },
   },
   {
-    type: HomepageSectionType.HOW_IT_WORKS,
+    /*
+     * The scrolling strip, directly under the hero.
+     *
+     * Phrases, not sentences: it moves, so anything that has to be read in one
+     * pass belongs in a band that holds still. What it is really doing is
+     * naming the things the shop wants associated with it — the craft, the
+     * place, the promise — in the three or four words each of them takes.
+     *
+     * One per line; `marqueeConfig` splits them.
+     */
+    type: HomepageSectionType.MARQUEE,
     position: 3,
     isEnabled: true,
-    title: 'Quatre étapes, et vous savez ce que ça coûte.',
+    title: 'Ce que nous faisons',
+    config: {
+      words: [
+        'Brodé à la main',
+        'Pièce unique',
+        'Alger',
+        'Devis en 6 heures',
+        'À partir d’une pièce',
+        'Streetwear & marques',
+      ].join('\n'),
+      en: {
+        title: 'What we do',
+        words: [
+          'Hand finished',
+          'One of a kind',
+          'Algiers',
+          'Quoted in 6 hours',
+          'From a single piece',
+          'Streetwear & brands',
+        ].join('\n'),
+      },
+    },
+  },
+  {
+    type: HomepageSectionType.HOW_IT_WORKS,
+    position: 4,
+    isEnabled: true,
+    title: 'Quatre étapes, et vous savez ce que ça *coûte.*',
     body: 'Pas de « contactez-nous pour un prix ». Le montant s’affiche pendant que vous configurez, et vous partez avec un chiffre.',
     config: {
       eyebrow: 'Sur mesure',
@@ -95,7 +132,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
         },
       ],
       en: {
-        title: 'Four steps, and you know what it costs.',
+        title: 'Four steps, and you know what it *costs.*',
         body: 'No "contact us for a price". The amount appears while you configure, and you leave with a figure.',
         eyebrow: 'Made to order',
         points: [
@@ -130,7 +167,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
     // destination exists, which is an UPDATE rather than a deploy. A link to a
     // page that does not exist is a 404 dressed up as an affordance.
     type: HomepageSectionType.CATEGORY_GRID,
-    position: 4,
+    position: 5,
     isEnabled: false,
     title: 'Par type de pièce',
     ctaLabel: 'Tout voir',
@@ -147,7 +184,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.FEATURED_PRODUCTS,
-    position: 5,
+    position: 6,
     isEnabled: true,
     title: 'Pièces prêtes à porter',
     ctaLabel: 'Tout voir',
@@ -164,9 +201,9 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.GALLERY,
-    position: 6,
+    position: 7,
     isEnabled: true,
-    title: 'Ce que nous avons brodé',
+    title: 'Ce que nous avons *brodé*',
     body: 'Des pièces réalisées à l’atelier, pour des entreprises, des clubs et des familles.',
     ctaLabel: 'Voir tout notre travail',
     ctaHref: '/gallery',
@@ -174,7 +211,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
       eyebrow: 'Notre travail',
       limit: 4,
       en: {
-        title: 'What we have embroidered',
+        title: 'What we have *embroidered*',
         body: 'Pieces made in the workshop, for companies, clubs and families.',
         ctaLabel: 'See all our work',
         eyebrow: 'Our work',
@@ -183,9 +220,9 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.WHY_US,
-    position: 7,
+    position: 8,
     isEnabled: true,
-    title: 'Le fil fait la différence.',
+    title: 'Le fil fait la *différence.*',
     body: 'Chaque pièce est brodée sur machine industrielle après numérisation du motif — une étape que nous faisons nous-mêmes, parce qu’un fichier mal numérisé se voit sur le vêtement fini.',
     config: {
       eyebrow: 'L’atelier',
@@ -205,7 +242,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
         },
       ],
       en: {
-        title: 'The thread is the difference.',
+        title: 'The thread is the *difference.*',
         body: 'Every piece is embroidered on an industrial machine after the design has been digitised — a step we do ourselves, because a badly digitised file shows on the finished garment.',
         eyebrow: 'The workshop',
         points: [
@@ -227,7 +264,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.REVIEWS,
-    position: 8,
+    position: 9,
     isEnabled: true,
     title: 'Ce qu’en disent nos clients',
     config: {
@@ -238,7 +275,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.CUSTOM_CTA,
-    position: 9,
+    position: 10,
     isEnabled: true,
     title: 'Une commande pour votre équipe ?',
     body: 'Envoyez-nous votre logo et le nombre de pièces. Vous recevez un devis chiffré, ligne par ligne, sous 6 heures ouvrées.',
@@ -256,7 +293,7 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.SOCIAL,
-    position: 10,
+    position: 11,
     isEnabled: true,
     title: 'Nous suivre',
     config: {
@@ -266,16 +303,16 @@ export const HOMEPAGE_SECTIONS: readonly SeedSection[] = [
   },
   {
     type: HomepageSectionType.FINAL_CTA,
-    position: 11,
+    position: 12,
     isEnabled: true,
-    title: 'Envoyez-nous votre idée.',
+    title: 'Envoyez-nous votre *idée.*',
     body: 'Un logo d’entreprise, le prénom d’un enfant, un dessin fait à la main. Si cela tient sur du tissu, cela se brode.',
     ctaLabel: 'Créer ma broderie',
     ctaHref: '/custom',
     config: {
       eyebrow: 'Prêt à commencer ?',
       en: {
-        title: 'Send us your idea.',
+        title: 'Send us your *idea.*',
         body: 'A company logo, a child’s name, a drawing made by hand. If it fits on fabric, it can be embroidered.',
         ctaLabel: 'Start my embroidery',
         eyebrow: 'Ready to start?',

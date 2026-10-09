@@ -6,6 +6,7 @@ import { Move, RotateCw, Scaling } from 'lucide-react';
 import { Inline, Stack } from '@/components/layout/layout';
 import { Text } from '@/components/ui/typography';
 import { cn } from '@/components/ui/cn';
+import { StitchPreview } from '@/components/commerce/stitch-preview';
 import { useDictionary } from '@/i18n/client';
 import {
   DEFAULT_TRANSFORM,
@@ -69,6 +70,15 @@ export type PlacementEditorProps = {
   artwork: { previewUrl: string | null; name: string } | null;
   /** Pixel dimensions of the artwork, for its aspect ratio. */
   artworkAspect: ArtworkAspect | null;
+  /**
+   * Draw the artwork as embroidery rather than as the file.
+   *
+   * Owned by the builder, because the design step offers the same choice and
+   * the two must agree — see its comment. The transform is unaffected either
+   * way: the box, the millimetres and what the workshop is told are identical.
+   * This changes only what is painted inside the box.
+   */
+  stitched: boolean;
   /** The priced bands, offered as quick sizes. */
   sizes: readonly BuilderEmbroiderySize[];
   surfaceImageId: string | null;
@@ -84,6 +94,7 @@ export function PlacementEditor({
   surfaces,
   artwork,
   artworkAspect,
+  stitched,
   sizes,
   surfaceImageId,
   transform,
@@ -257,8 +268,24 @@ export function PlacementEditor({
 
   return (
     <Stack gap={4}>
+      {/*
+       * The faces, as photographs rather than as words.
+       *
+       * Phase 16, and it is a small change that removes a real hesitation:
+       * "Devant" and "Dos" are unambiguous for a T-shirt and much less so for
+       * a cap or an apron, where the customer is choosing between pictures they
+       * have not seen yet. A strip of thumbnails answers "which one is that?"
+       * before it is asked, which is what the reference designer does.
+       *
+       * Still a `tablist` with the same keys and the same aria — this is the
+       * same control wearing a picture.
+       */}
       {surfaces.length > 1 && (
-        <div role="tablist" aria-label={t.custom.placementFaces} className="flex gap-1">
+        <div
+          role="tablist"
+          aria-label={t.custom.placementFaces}
+          className="flex flex-wrap gap-2"
+        >
           {surfaces.map((surface) => {
             const selected = surface.imageId === active.imageId;
 
@@ -270,15 +297,41 @@ export function PlacementEditor({
                 aria-selected={selected}
                 onClick={() => onChange({ surfaceImageId: surface.imageId, transform })}
                 className={cn(
-                  'text-body-sm min-h-11 rounded-md px-4',
+                  'flex w-20 flex-col items-center gap-1.5 rounded-xl p-1.5',
                   'duration-fast transition-colors ease-out motion-reduce:transition-none',
                   'focus-visible:shadow-focus focus-visible:outline-none',
-                  selected
-                    ? 'bg-fg text-fg-inverted font-medium'
-                    : 'text-fg-muted hover:bg-bg-subtle hover:text-fg',
+                  selected ? 'bg-bg-subtle' : 'hover:bg-bg-subtle',
                 )}
               >
-                {t.custom.surfaceNames[surface.surface]}
+                <span
+                  className={cn(
+                    'bg-surface-sunken block w-full overflow-hidden rounded-lg border',
+                    // The selected face is marked by a solid border, not by
+                    // colour alone — the names below it are the label, and the
+                    // border is the second signal (section 8).
+                    selected ? 'border-fg border-2' : 'border-hairline',
+                  )}
+                  style={{ aspectRatio: '4 / 5' }}
+                >
+                  {surface.src && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={surface.src}
+                      alt=""
+                      draggable={false}
+                      className="size-full object-cover"
+                    />
+                  )}
+                </span>
+
+                <span
+                  className={cn(
+                    'text-caption text-center leading-tight',
+                    selected ? 'text-fg font-medium' : 'text-fg-muted',
+                  )}
+                >
+                  {t.custom.surfaceNames[surface.surface]}
+                </span>
               </button>
             );
           })}
@@ -288,7 +341,7 @@ export function PlacementEditor({
       <div
         ref={frame}
         style={{ aspectRatio: String(ratio) }}
-        className="border-border bg-bg-subtle relative w-full select-none overflow-hidden rounded-md border"
+        className="border-hairline bg-bg-subtle relative w-full select-none overflow-hidden rounded-2xl border"
       >
         {active.src && (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -320,12 +373,11 @@ export function PlacementEditor({
           )}
         >
           {artwork?.previewUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
+            <StitchPreview
               src={artwork.previewUrl}
               alt=""
-              draggable={false}
-              className="pointer-events-none block w-full"
+              stitched={stitched}
+              className="pointer-events-none w-full"
             />
           ) : (
             /*
@@ -407,7 +459,7 @@ export function PlacementEditor({
               type="button"
               onClick={() => apply(transformForBand(band, transform, active.widthMm))}
               className={cn(
-                'text-body-sm border-border min-h-9 rounded-md border px-3',
+                'text-body-sm border-border min-h-10 rounded-full border px-4',
                 'hover:border-border-strong duration-fast transition-colors ease-out',
                 'focus-visible:shadow-focus focus-visible:outline-none',
                 'motion-reduce:transition-none',

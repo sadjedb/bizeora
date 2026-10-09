@@ -36,7 +36,7 @@ export default async function Image({
 }) {
   const { locale, slug } = await params;
   const { t } = dictionaryFor(locale);
-  const product = await getPublishedProductBySlug(slug);
+  const product = await getPublishedProductBySlug(slug, locale);
 
   return new ImageResponse(
     <OgCard

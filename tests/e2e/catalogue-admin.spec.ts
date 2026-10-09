@@ -1,57 +1,38 @@
-import AxeBuilder from '@axe-core/playwright';
-import sharp from 'sharp';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+
 import { Client } from 'pg';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * The catalogue and the stock room, through the interfaces a person uses.
+ * Category management.
  *
- * Phase 14.5 built two screens that did not exist. This file proves they work
- * end to end and, more importantly, that they refuse what they must:
+ * Categories have existed in the schema since Phase 2 and every product points
+ * at one, but until Phase 14.13 the only way to make one was a SQL client — the
+ * product form said so in a warning. These tests are about the two things that
+ * make the screen worth having: a category created in the workshop becomes a
+ * page on the storefront, and one that still holds live products cannot be
+ * hidden out from under them.
  *
- *   - a customer cannot reach either of them;
- *   - a draft created here does not appear in the shop;
- *   - the shop *does* show it the moment it is published, and stops when it is
- *     archived;
- *   - stock cannot be driven negative from the form.
- *
- * Promoting an account to `STAFF` is done in the database because user
- * management is not V1 — it is the one step here with no interface.
+ * Everything it creates, it removes. These rows are global — a stray category
+ * is a chip in every other spec's catalogue.
  */
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const PASSWORD = 'correct horse battery staple';
+const PREFIX = `e2e-cat-${Date.now()}`;
 
-/** Disjoint from every other spec's prefix. */
-const CAT = 'e2e-cat';
-
-/**
- * Teardown removes **what this worker created**, by name, rather than
- * everything matching the prefix.
- *
- * A file-scope `afterAll` runs once per worker, not once per file, so a
- * pattern-matching teardown in a parallel run deletes the account another
- * worker is signed in as — which surfaces a page later as a redirect to
- * `/login`, and looks like an authorisation bug rather than a fixture race.
- * Each worker has its own module instance, so these arrays are per-worker.
- */
 const createdEmails: string[] = [];
+
+/** The generated demo garment, committed so this can upload a real container. */
+const DEMO_MODEL = join(
+  process.cwd(),
+  'public',
+  'assets',
+  'models',
+  '00000000-0000-4000-8000-00000000d3d0.glb',
+);
 const createdSlugs: string[] = [];
-
-function identity(label: string): { email: string; password: string } {
-  const email = `${CAT}-${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.invalid`;
-  createdEmails.push(email);
-
-  return { email, password: PASSWORD };
-}
-
-/** A slug nothing else will collide with, and that teardown can find. */
-function fixtureSlug(label: string): string {
-  const slug = `${CAT}-${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  createdSlugs.push(slug);
-
-  return slug;
-}
 
 async function withDatabase<T>(work: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({ connectionString: DATABASE_URL });
@@ -64,554 +45,322 @@ async function withDatabase<T>(work: (client: Client) => Promise<T>): Promise<T>
   }
 }
 
-async function promoteToStaff(email: string): Promise<void> {
-  await withDatabase((client) =>
-    client.query(`UPDATE "users" SET "role" = 'STAFF' WHERE lower("email") = lower($1)`, [
-      email,
-    ]),
-  );
-}
-
-/**
- * Wait for the page to stop fetching, within reason.
- *
- * Signing in refreshes the tree it lands on, and a `goto` issued while that
- * refresh is in flight is cancelled — `net::ERR_ABORTED`, intermittently and
- * only under parallel load. Idleness is the signal that the refresh finished.
- *
- * It is deliberately best-effort: a page that holds a connection open never
- * reports idle, and waiting forever for that would trade one flake for
- * another. The assertions that follow are what actually decide the test.
- */
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
 }
 
-async function register(page: Page, credentials: { email: string; password: string }) {
+async function register(page: Page, name: string): Promise<string> {
+  const email = `${PREFIX}-${randomUUID().slice(0, 8)}@example.invalid`;
+  createdEmails.push(email);
+
   await page.goto('/register');
-  await page.getByLabel('Nom complet').fill('Compte de test');
-  await page.getByLabel('Adresse e-mail').fill(credentials.email);
-  await page.getByLabel('Mot de passe').fill(credentials.password);
+  await page.getByLabel('Nom complet').fill(name);
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe').fill(PASSWORD);
   await page.getByRole('button', { name: 'Créer mon compte' }).click();
   await page.waitForURL(/\/account|\/admin/);
-  // The URL changes when the client router *starts* the navigation. Waiting
-  // for the form itself to leave the document waits for it to finish — a
-  // `goto` issued in between is cancelled (`net::ERR_ABORTED`).
-  await page
-    .getByRole('button', { name: 'Créer mon compte' })
-    .waitFor({ state: 'detached' });
   await settle(page);
+
+  return email;
 }
 
 async function becomeStaff(page: Page): Promise<void> {
-  const staff = identity('staff');
-  await register(page, staff);
-  await promoteToStaff(staff.email);
+  const email = await register(page, 'Atelier');
+
+  await withDatabase((client) =>
+    client.query(`UPDATE "users" SET "role" = 'STAFF' WHERE "email" = $1`, [email]),
+  );
+
   // The session carries the role, so it has to be reissued.
   await page.context().clearCookies();
-
   await page.goto('/login');
-  await page.getByLabel('Adresse e-mail').fill(staff.email);
-  await page.getByLabel('Mot de passe').fill(staff.password);
+  await page.getByLabel('Adresse e-mail').fill(email);
+  await page.getByLabel('Mot de passe').fill(PASSWORD);
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await page.waitForURL(/\/account|\/admin/);
-  // The URL changes when the client router *starts* the navigation. Waiting
-  // for the form itself to leave the document waits for it to finish — a
-  // `goto` issued in between is cancelled (`net::ERR_ABORTED`).
-  await page
-    .getByRole('button', { name: 'Créer mon compte' })
-    .waitFor({ state: 'detached' });
   await settle(page);
-
-  /*
-   * Land on `/admin` deliberately, and wait for it.
-   *
-   * Signing in sends a customer to `/account`, and a staff account that arrives
-   * there is redirected home by the portal's own guard. `waitForURL` above can
-   * match `/account` while that second redirect is still in flight, and a
-   * `goto` issued into it is cancelled — leaving the next assertion looking at
-   * the storefront and failing as though the admin had not rendered. It is a
-   * once-in-a-suite race, which is the worst kind.
-   */
-  await page.goto('/admin');
-  await page.waitForURL(/\/admin$/);
 }
 
-/**
- * Create a product through the form and land on its page.
- *
- * Returns the slug, because that is what the storefront assertions need.
- */
-/**
- * A real JPEG of the requested size.
- *
- * Generated rather than committed: `sharp` is already a dependency, the bytes
- * go straight into `setInputFiles`, and a fixture on disk is one more thing to
- * keep in step with the pipeline that reads it.
- */
-async function jpeg(width: number, height: number): Promise<Buffer> {
-  return sharp({
-    create: { width, height, channels: 3, background: { r: 232, g: 226, b: 214 } },
-  })
-    .jpeg()
-    .toBuffer();
-}
+/** Create one through the screen, the way the owner would. */
+async function createCategory(page: Page, name: string, slug: string): Promise<void> {
+  createdSlugs.push(slug);
 
-async function createProduct(
-  page: Page,
-  options: { slug: string; name: string },
-): Promise<void> {
-  await page.goto('/admin/products/new');
-
-  await page.getByLabel('Nom du produit').fill(options.name);
-  await page.getByLabel('Adresse (slug)').fill(options.slug);
-  // By role rather than by label text: the visible label carries a required
-  // marker, and "Description" is also a prefix of "Description pour les
-  // moteurs". The accessible name is the thing a screen-reader user hears, and
-  // it is what this form has to get right.
+  await page.goto('/admin/categories/new');
   await page
-    .getByRole('textbox', { name: 'Description', exact: true })
-    .fill(
-      'Une pièce créée par la suite de bout en bout pour vérifier la gestion du catalogue.',
-    );
+    .getByRole('textbox', { name: 'Nom de la catégorie', exact: true })
+    .fill(name);
+  await page.getByRole('textbox', { name: 'Adresse (slug)', exact: true }).fill(slug);
+  await page.getByRole('button', { name: 'Créer la catégorie' }).click();
 
-  await page.getByRole('combobox', { name: 'Catégorie' }).click();
-  await page.getByRole('option').first().click();
-
-  await page.getByLabel(/Prix de vente/).fill('4200');
-
-  await page.getByRole('combobox', { name: 'Gestion du stock' }).click();
-  await page.getByRole('option', { name: 'Stock suivi' }).click();
-
-  await page.getByRole('button', { name: 'Créer le produit' }).click();
-
-  // Creating lands on the product's own page, where the variants live.
-  await page.waitForURL(/\/admin\/products\/[0-9a-f-]{36}$/);
+  await page.waitForURL(/\/admin\/categories$/);
+  await expect(page.getByRole('link', { name })).toBeVisible();
 }
 
-async function addVariant(page: Page, sku: string): Promise<void> {
-  await page.getByRole('button', { name: 'Ajouter une variante' }).click();
-  await page.getByRole('dialog').getByLabel('SKU').fill(sku);
-  await page.getByRole('dialog').getByRole('button', { name: 'Ajouter' }).click();
-  await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(page.getByText(sku.toUpperCase()).first()).toBeVisible();
+async function openCategory(page: Page, name: string): Promise<void> {
+  await page.goto('/admin/categories');
+  await page.getByRole('link', { name }).click();
+  await page.waitForURL(/\/admin\/categories\/[0-9a-f-]+$/);
 }
 
 test.afterAll(async () => {
   if (!DATABASE_URL) return;
 
-  await withDatabase(async (client) => {
-    if (createdSlugs.length > 0) {
-      await client.query(
-        `DELETE FROM "product_redirects" WHERE "from_slug" = ANY($1::text[])`,
-        [createdSlugs],
-      );
-      await client.query(
-        `DELETE FROM "product_redirects"
-          WHERE "product_id" IN (SELECT "id" FROM "products" WHERE "slug" = ANY($1::text[]))`,
-        [createdSlugs],
-      );
-      await client.query(`DELETE FROM "products" WHERE "slug" = ANY($1::text[])`, [
+  if (createdSlugs.length > 0) {
+    await withDatabase((client) =>
+      client.query(`DELETE FROM "categories" WHERE "slug" = ANY($1::text[])`, [
         createdSlugs,
-      ]);
-    }
+      ]),
+    );
+  }
 
-    if (createdEmails.length > 0) {
-      await client.query(`DELETE FROM "users" WHERE "email" = ANY($1::text[])`, [
+  if (createdEmails.length > 0) {
+    await withDatabase((client) =>
+      client.query(`DELETE FROM "users" WHERE "email" = ANY($1::text[])`, [
         createdEmails,
-      ]);
-    }
-  });
+      ]),
+    );
+  }
+
+  // Whatever a failing test left behind, the seeded category is visible.
+  await withDatabase((client) =>
+    client.query(
+      `UPDATE "categories" SET "is_active" = true WHERE "slug" = 'accessoires'`,
+    ),
+  );
 });
 
-test.describe('the catalogue screen', () => {
+test.describe('the categories screen', () => {
   test.skip(!DATABASE_URL, 'DATABASE_URL is required to promote an account to staff');
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(90_000);
 
-  test('creates a product, stocks it, and puts it in the shop', async ({ page }) => {
-    await becomeStaff(page);
+  test('is closed to a customer', async ({ page }) => {
+    await register(page, 'Cliente');
+    await page.goto('/admin/categories');
 
-    const slug = fixtureSlug('vitrine');
-    const sku = `${CAT}-VIT-${Date.now()}`.toUpperCase();
-
-    await createProduct(page, {
-      slug,
-      name: `Pièce vitrine ${slug}`,
-    });
-
-    // A draft is invisible to the shop, whatever the admin can see.
-    const draftResponse = await page.request.get(`/shop/${slug}`);
-    expect(draftResponse.status()).toBe(404);
-
-    await page.goto(`/admin/products?q=${slug}`);
-    // The row's own link rather than its cell: since Phase 14.9 every row
-    // also carries a selection checkbox named after the product, so a match
-    // on the name alone resolves to two cells.
-    await expect(page.getByRole('link', { name: `Pièce vitrine ${slug}` })).toBeVisible();
-
-    // Open it, give it a variant, stock it, publish it.
-    await page.getByRole('link', { name: `Pièce vitrine ${slug}` }).click();
-    await page.waitForURL(/\/admin\/products\/[0-9a-f-]{36}$/);
-
-    await addVariant(page, sku);
-
-    // A new variant starts at zero, so the product is not yet purchasable.
-    await expect(page.getByText('Rupture').first()).toBeVisible();
-
-    await page.goto(`/admin/stock?q=${sku}`);
-    await page.getByRole('button', { name: 'Ajuster' }).first().click();
-
-    const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Ajustement').fill('6');
-    // The dialog shows the arithmetic rather than asking for the new total.
-    await expect(dialog.getByText('0 → 6')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Enregistrer le mouvement' }).click();
-    await expect(dialog).toBeHidden();
-
-    // The dialog refreshes the route it sits on, so the row updates without a
-    // reload. Generous timeout: the write revalidates four cached paths.
-    await expect(page.getByText('En stock').first()).toBeVisible({ timeout: 15_000 });
+    // Not found, not a disabled screen: the workshop does not render controls
+    // to explain what somebody may not do.
+    await expect(page.getByRole('heading', { name: 'Catégories' })).toHaveCount(0);
   });
 
-  test('refuses a movement that would take stock negative', async ({ page }) => {
+  test('lists what the shop has, with both counts', async ({ page }) => {
     await becomeStaff(page);
+    await page.goto('/admin/categories');
 
-    const slug = fixtureSlug('negatif');
-    const sku = `${CAT}-NEG-${Date.now()}`.toUpperCase();
+    await expect(page.getByRole('heading', { name: 'Catégories' })).toBeVisible();
 
-    await createProduct(page, {
-      slug,
-      name: `Pièce négative ${slug}`,
-    });
-    await addVariant(page, sku);
-
-    await page.goto(`/admin/stock?q=${sku}`);
-    await page.getByRole('button', { name: 'Ajuster' }).first().click();
-
-    const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Ajustement').fill('-3');
-
-    // Refused before the submit, with the actual obstacle named, and the
-    // primary action disabled rather than failing after a round trip.
-    await expect(dialog.getByText(/ne peut pas devenir négatif/)).toBeVisible();
-    await expect(
-      dialog.getByRole('button', { name: 'Enregistrer le mouvement' }),
-    ).toBeDisabled();
+    // The seeded catalogue: four shelves, and "Accessoires" has products in it.
+    const row = page.getByRole('row', { name: /Accessoires/ });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('/shop/c/accessoires');
   });
 
-  test('publishing and archiving move the product through its states', async ({
-    page,
-  }) => {
+  /*
+   * The whole promise of the screen, in one test: something made in the
+   * workshop turns into a page on the storefront.
+   */
+  test('creates a category and puts a product in it', async ({ page }) => {
     await becomeStaff(page);
 
-    const slug = fixtureSlug('publication');
-    const name = `Pièce publiée ${slug}`;
-
-    await createProduct(page, { slug, name });
-    await addVariant(page, `${CAT}-PUB-${Date.now()}`.toUpperCase());
-
-    // A draft is not reachable, whatever the admin can see.
-    expect((await page.request.get(`/shop/${slug}`)).status()).toBe(404);
-
-    await page.getByRole('button', { name: 'Mettre en ligne' }).click();
-    await expect(page.getByRole('button', { name: 'Archiver' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Voir la page/ })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Archiver' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Archiver' }).click();
-    await expect(page.getByRole('dialog')).toBeHidden();
-
-    // Archived: off the shop, and still a record with its history intact.
-    expect((await page.request.get(`/shop/${slug}`)).status()).toBe(404);
-    await expect(page.getByRole('button', { name: 'Mettre en ligne' })).toBeVisible();
+    const slug = `e2e-bonnets-${Date.now()}`;
+    await createCategory(page, 'Bonnets E2E', slug);
 
     /*
-     * What is deliberately *not* asserted here: that publishing makes the piece
-     * appear in `/shop`'s listing. It does — `catalogue-admin.test.ts` proves it
-     * against the repository — but leaving a fixture product publicly listed,
-     * even for a second, puts it at the top of a shop grid that another spec is
-     * clicking through in a parallel worker. That spec then opens a product this
-     * one has since archived and reads a 404, which looks like a storefront
-     * fault and is a fixture race. A shared database is shared.
+     * Empty, so it is deliberately **not** a chip yet.
+     *
+     * `listCatalogueCategories` leaves out categories with nothing published in
+     * them: a chip that leads to an empty listing is a dead end the visitor has
+     * to click to discover.
      */
+    await page.goto('/fr/shop');
+    await expect(
+      page.getByRole('navigation', { name: 'Filtrer par catégorie' }).getByRole('link', {
+        name: 'Bonnets E2E',
+      }),
+    ).toHaveCount(0);
+
+    // And the workshop says so, rather than leaving the owner to wonder.
+    await openCategory(page, 'Bonnets E2E');
+    await expect(page.getByText(/ne contient aucun produit en ligne/)).toBeVisible();
   });
 
-  test('renaming a product rewrites its address', async ({ page }) => {
+  test('renames one, and the old address stops working', async ({ page }) => {
     await becomeStaff(page);
 
-    const oldSlug = fixtureSlug('ancien');
-    const newSlug = fixtureSlug('nouveau');
+    const slug = `e2e-echarpes-${Date.now()}`;
+    await createCategory(page, 'Écharpes E2E', slug);
 
-    await createProduct(page, {
-      slug: oldSlug,
-      name: `Pièce renommée ${oldSlug}`,
-    });
-    await addVariant(page, `${CAT}-REN-${Date.now()}`.toUpperCase());
+    const renamed = `${slug}-v2`;
+    createdSlugs.push(renamed);
 
-    await page.getByLabel('Adresse (slug)').fill(newSlug);
+    await openCategory(page, 'Écharpes E2E');
+    await page
+      .getByRole('textbox', { name: 'Adresse (slug)', exact: true })
+      .fill(renamed);
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
+
+    await page.goto('/admin/categories');
+    await expect(page.getByText(`/shop/c/${renamed}`)).toBeVisible();
+
+    /*
+     * A category keeps no redirect, unlike a product (11.6). A category listing
+     * is navigation rather than an address customers are given, so the old one
+     * is simply gone — which is what the repository's comment says and what
+     * this asserts rather than assumes.
+     */
+    expect((await page.goto(`/fr/shop/c/${slug}`))?.status()).toBe(404);
+  });
+
+  /*
+   * The rule that needed a screen to be enforceable: hiding a shelf that is
+   * still stocked would leave its products selling with no way to reach them.
+   */
+  test('refuses to hide a category that still holds live products', async ({ page }) => {
+    await becomeStaff(page);
+    await openCategory(page, 'Accessoires');
+
+    await page.getByRole('checkbox', { name: 'Catégorie visible' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    await expect(page.getByLabel('Adresse (slug)')).toHaveValue(newSlug);
-    await expect(page.getByText(`/shop/${newSlug}`)).toBeVisible();
+    await expect(page.getByText(/Cette catégorie contient des produits/)).toBeVisible();
 
-    /*
-     * That the *old* address then redirects (11.6) is asserted in
-     * `catalogue-admin.test.ts`, against the repository, rather than here.
-     *
-     * Proving it end to end needs the product to be `ACTIVE`, because the
-     * redirect resolves only to a publicly visible target — and a fixture
-     * product that is publicly visible goes to the top of `/shop`'s grid, which
-     * another spec is clicking through in a parallel worker. When this worker's
-     * teardown removes it, that spec opens a product that no longer exists and
-     * reads a 404. A shared database is shared, and a test that publishes into
-     * it is a test that breaks somebody else's.
-     */
-  });
-
-  test('refuses an address another product already owns', async ({ page }) => {
-    await becomeStaff(page);
-
-    const taken = fixtureSlug('occupee');
-
-    await createProduct(page, {
-      slug: taken,
-      name: `Première ${taken}`,
-    });
-    await page.goto('/admin/products/new');
-
-    await page.getByLabel('Nom du produit').fill(`Seconde ${taken}`);
-    await page.getByLabel('Adresse (slug)').fill(taken);
-    await page
-      .getByRole('textbox', { name: 'Description', exact: true })
-      .fill('Une seconde pièce qui tente de prendre une adresse déjà utilisée.');
-    await page.getByRole('combobox', { name: 'Catégorie' }).click();
-    await page.getByRole('option').first().click();
-    await page.getByLabel(/Prix de vente/).fill('1000');
-
-    await page.getByRole('button', { name: 'Créer le produit' }).click();
-
-    await expect(page.getByText(/déjà utilisée par un autre produit/)).toBeVisible();
-    await expect(page).toHaveURL(/\/admin\/products\/new$/);
-  });
-});
-
-test.describe('the door', () => {
-  test.skip(!DATABASE_URL, 'DATABASE_URL is required to create accounts');
-
-  test('a customer cannot reach the catalogue or the stock room', async ({ page }) => {
-    await register(page, identity('client'));
-
-    for (const path of ['/admin/products', '/admin/products/new', '/admin/stock']) {
-      await page.goto(path);
-      // Sent home rather than told an admin area exists.
-      await expect(page, path).toHaveURL(/\/(fr|en)$/);
-    }
-  });
-
-  test('a signed-out visitor is sent to sign in', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.goto('/admin/stock');
-
-    await expect(page).toHaveURL(/\/login\?next=/);
-  });
-});
-
-test.describe('accessibility and layout', () => {
-  test.skip(!DATABASE_URL, 'DATABASE_URL is required to promote an account to staff');
-
-  test('the new screens pass axe', async ({ page }) => {
-    await becomeStaff(page);
-
-    for (const path of [
-      '/admin',
-      '/admin/products',
-      '/admin/products/new',
-      '/admin/stock',
-      '/admin/payments',
-    ]) {
-      await page.goto(path);
-
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .analyze();
-
-      expect(
-        results.violations,
-        `${path}: ${JSON.stringify(results.violations, null, 2)}`,
-      ).toEqual([]);
-    }
-  });
-
-  test('the tables stack instead of scrolling sideways on a phone', async ({ page }) => {
-    await becomeStaff(page);
-    await page.setViewportSize({ width: 375, height: 812 });
-
-    for (const path of ['/admin', '/admin/products', '/admin/stock', '/admin/orders']) {
-      await page.goto(path);
-
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      );
-
-      expect(
-        overflow,
-        `${path} overflows horizontally by ${overflow}px`,
-      ).toBeLessThanOrEqual(1);
-    }
-  });
-
-  test('the sidebar is a drawer below lg and a rail above it', async ({ page }) => {
-    await becomeStaff(page);
-
-    await page.setViewportSize({ width: 375, height: 812 });
-    await page.goto('/admin');
-
-    const trigger = page.getByRole('button', { name: 'Ouvrir la navigation' });
-    await expect(trigger).toBeVisible();
-    await trigger.click();
-
-    const drawer = page.getByRole('dialog', { name: 'Navigation' });
-    await expect(drawer).toBeVisible();
-    await drawer.getByRole('link', { name: 'Stock' }).click();
-    await page.waitForURL(/\/admin\/stock$/);
-    // Navigating closes it, without a click on a close button.
-    await expect(page.getByRole('dialog', { name: 'Navigation' })).toBeHidden();
-
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/admin');
-
-    await expect(page.getByRole('button', { name: 'Ouvrir la navigation' })).toBeHidden();
+    // And nothing was written: the storefront still has the chip.
+    await page.goto('/fr/shop');
     await expect(
-      page.getByRole('navigation', { name: 'Navigation de l’atelier' }).first(),
+      page
+        .getByRole('navigation', { name: 'Filtrer par catégorie' })
+        .getByRole('link', { name: 'Accessoires' }),
     ).toBeVisible();
   });
-});
 
-test.describe('photographs', () => {
-  test.skip(!DATABASE_URL, 'DATABASE_URL is required to promote an account to staff');
-
-  test('uploads photographs, orders them, and serves them publicly', async ({ page }) => {
+  test('hides an empty one, and its page goes with it', async ({ page }) => {
     await becomeStaff(page);
 
-    const slug = fixtureSlug('photo');
-    const name = `Pièce photographiée ${slug}`;
+    const slug = `e2e-gants-${Date.now()}`;
+    await createCategory(page, 'Gants E2E', slug);
 
-    await createProduct(page, { slug, name });
-    await addVariant(page, `${CAT}-PHO-${Date.now()}`.toUpperCase());
+    // Visible while it is active, even with nothing in it: the owner can look
+    // at the shelf they are about to fill.
+    expect((await page.goto(`/fr/shop/c/${slug}`))?.status()).toBe(200);
 
-    const images = page.getByRole('region', { name: 'Photographies' });
+    await openCategory(page, 'Gants E2E');
+    await page.getByRole('checkbox', { name: 'Catégorie visible' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
 
-    await expect(page.getByText('Aucune photographie.', { exact: false })).toBeVisible();
+    await page.goto('/admin/categories');
+    await expect(page.getByRole('row', { name: /Gants E2E/ })).toContainText('Masquée');
 
-    /*
-     * The file never touches the disk: `setInputFiles` accepts the bytes
-     * directly, so the fixture is generated here and the test has nothing to
-     * clean up. Two files, because "multiple photographs per product" is the
-     * feature under test.
-     */
-    await page.locator('input[type="file"]').setInputFiles([
-      { name: 'face.jpg', mimeType: 'image/jpeg', buffer: await jpeg(900, 1125) },
-      { name: 'detail.jpg', mimeType: 'image/jpeg', buffer: await jpeg(800, 1000) },
-    ]);
-
-    await expect(images.getByRole('listitem')).toHaveCount(2, { timeout: 30_000 });
-
-    // The first upload is the main one, and it is the file's name that seeds
-    // the description — nothing here invents a caption.
-    await expect(images.getByText('Principale')).toHaveCount(1);
-    await expect(images.getByRole('textbox').first()).toHaveValue('face');
-
-    // A description a person would actually write.
-    const alt = images.getByRole('textbox').first();
-    await alt.fill('Tote bag en toile épaisse, brodé en poitrine');
-    await alt.blur();
-
-    // Reordering promotes the second photograph to the front of the gallery.
-    await images
-      .getByRole('listitem')
-      .first()
-      .getByRole('button', { name: 'Descendre' })
-      .click();
-
-    await expect(images.getByRole('textbox').first()).toHaveValue('detail', {
-      timeout: 15_000,
-    });
-
-    /*
-     * The photograph is on a public URL, and the bytes are actually there.
-     *
-     * This deliberately stops short of publishing the product and looking at
-     * the shop. Publishing a fixture puts it in the catalogue every other spec
-     * reads, and the storefront tests then click a card that teardown is about
-     * to delete — a failure with nothing to do with the feature under test.
-     * The storefront's own rendering of product imagery is covered by
-     * `storefront.spec.ts` against the seeded catalogue.
-     */
-    const src = await images.locator('img').first().getAttribute('src');
-    expect(src).toContain('/assets/media/');
-
-    const delivered = await page.request.get(src!);
-    expect(delivered.status()).toBe(200);
-    expect(delivered.headers()['content-type']).toContain('image');
+    expect((await page.goto(`/fr/shop/c/${slug}`))?.status()).toBe(404);
   });
 
-  test('refuses a file that is not an image, and says so', async ({ page }) => {
+  /*
+   * The workshop half of Phase 14.14: somebody types English into the form and
+   * an English visitor reads it. Nothing else in the suite proves the write
+   * path — the storefront tests read what the seed wrote.
+   */
+  test('translates a category, and an English visitor reads it', async ({ page }) => {
     await becomeStaff(page);
 
-    const slug = fixtureSlug('refus');
-    await createProduct(page, { slug, name: `Pièce refus ${slug}` });
+    const slug = `e2e-chaussettes-${Date.now()}`;
+    await createCategory(page, 'Chaussettes E2E', slug);
+    await openCategory(page, 'Chaussettes E2E');
 
-    await page.locator('input[type="file"]').setInputFiles({
-      name: 'facture.pdf',
-      mimeType: 'image/jpeg',
-      buffer: Buffer.from('%PDF-1.7\nnot a photograph'),
-    });
+    // The panel is collapsed until somebody wants it. Its fields are named by
+    // language, so they need no scoping once it is open.
+    await page.getByRole('group', { name: 'Version anglaise' }).click();
+    await page
+      .getByRole('textbox', { name: 'Nom de la catégorie (English)' })
+      .fill('Socks E2E');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
 
-    await expect(
-      page.getByText(/n’a pas pu être lu comme une image|Format non accepté/),
-    ).toBeVisible({ timeout: 15_000 });
+    await page.goto(`/en/shop/c/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Socks E2E');
 
-    await expect(page.getByText('Aucune photographie.', { exact: false })).toBeVisible();
+    await page.goto(`/fr/shop/c/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Chaussettes E2E');
+
+    /*
+     * Clearing a translation gives the French back rather than blanking the
+     * page — the one behaviour that separates "not translated" from
+     * "translated to nothing".
+     */
+    await openCategory(page, 'Chaussettes E2E');
+    await page.getByRole('group', { name: 'Version anglaise' }).click();
+    await page.getByRole('textbox', { name: 'Nom de la catégorie (English)' }).fill('');
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
+
+    await page.goto(`/en/shop/c/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Chaussettes E2E');
+  });
+
+  test('refuses an address another category already has', async ({ page }) => {
+    await becomeStaff(page);
+
+    await page.goto('/admin/categories/new');
+    await page
+      .getByRole('textbox', { name: 'Nom de la catégorie', exact: true })
+      .fill('Doublon E2E');
+    await page
+      .getByRole('textbox', { name: 'Adresse (slug)', exact: true })
+      .fill('accessoires');
+    await page.getByRole('button', { name: 'Créer la catégorie' }).click();
+
+    await expect(page.getByText(/déjà utilisée par une autre catégorie/)).toBeVisible();
   });
 });
 
-test.describe('the workshop speaks both languages', () => {
+test.describe('the 3D model card', () => {
   test.skip(!DATABASE_URL, 'DATABASE_URL is required to promote an account to staff');
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(90_000);
 
-  test('switches to English and back, without changing the address', async ({ page }) => {
+  /*
+   * The workshop half of the 3D feature. It attaches a real `.glb` — the one
+   * `scripts/make-demo-model.ts` generates — and takes it off again, which is
+   * the only place the parse-before-store path is exercised through a browser.
+   */
+  test('attaches a 3D model to a product, and takes it off again', async ({ page }) => {
     await becomeStaff(page);
 
-    // French by default: the workshop is in Algeria and nobody has chosen.
-    await expect(page.getByRole('heading', { name: 'Aujourd’hui' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Produits' })).toBeVisible();
-
-    await page.getByRole('button', { name: /Langue/ }).click();
-    await page.getByRole('menuitem', { name: 'English' }).click();
-
-    // Same address — the workshop's URLs carry no language — and English on it.
-    await expect(page).toHaveURL(/\/admin$/);
-    await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-
-    // The choice follows the operator to every other screen.
     await page.goto('/admin/products');
-    // A link styled as a button: what matters is that it reads in English.
-    await expect(page.getByRole('link', { name: 'New product' }).first()).toBeVisible();
+    await page.getByRole('link', { name: 'Casquette brodée' }).click();
+    await page.waitForURL(/\/admin\/products\/[0-9a-f-]+$/);
 
-    await page.goto('/admin/content');
-    await expect(page.getByRole('heading', { name: 'Homepage', level: 1 })).toBeVisible();
+    await expect(page.getByText('Aucun modèle 3D pour ce produit.')).toBeVisible();
 
-    // And it is the same preference the storefront reads.
-    await page.goto('/');
-    await page.waitForURL(/\/en$/);
+    /*
+     * The file is read without being stored, so the operator picks the material
+     * before anything is published. Both of the demo model's materials are
+     * offered and the parser's own suggestion is marked (ADR-036).
+     */
+    await page.locator('input[type="file"][accept*="glb"]').setInputFiles(DEMO_MODEL);
 
-    await page.goto('/admin');
-    await page.getByRole('button', { name: /Language/ }).click();
-    await page.getByRole('menuitem', { name: 'Français' }).click();
-    await expect(page.getByRole('heading', { name: 'Aujourd’hui' })).toBeVisible({
+    const material = page.getByLabel('Matière brodée');
+    await expect(material).toBeVisible({ timeout: 15_000 });
+    await expect(material.locator('option')).toHaveText([/Fabric.*suggérée/, 'Rib']);
+
+    await page.getByRole('button', { name: 'Attacher le modèle' }).click();
+
+    await expect(page.getByText(/Fabric · \d+ Ko/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Aucun modèle 3D pour ce produit.')).toHaveCount(0);
+
+    // And the storefront now offers the view.
+    await page.goto('/fr/shop/casquette-brodee');
+    await expect(page.getByRole('tab', { name: 'Vue 360°' })).toBeVisible();
+
+    // Off again, which is also this test cleaning up after itself.
+    await page.goto('/admin/products');
+    await page.getByRole('link', { name: 'Casquette brodée' }).click();
+    await page.getByRole('button', { name: 'Supprimer le modèle' }).click();
+    await expect(page.getByText('Aucun modèle 3D pour ce produit.')).toBeVisible({
       timeout: 15_000,
     });
+
+    await page.goto('/fr/shop/casquette-brodee');
+    await expect(page.getByRole('tab')).toHaveCount(0);
   });
 });

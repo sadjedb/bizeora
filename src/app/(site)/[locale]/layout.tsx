@@ -6,6 +6,8 @@ import { brand } from '@/config/brand';
 import { clientEnv } from '@/lib/env';
 import { publicRobots } from '@/lib/seo';
 import { ThemeScript } from '@/components/ui/theme';
+import { Intro, IntroScript } from '@/components/ui/intro';
+import { scriptNonce } from '@/lib/security/nonce';
 import { LOCALES, LOCALE_TAGS, OG_LOCALES, isLocale, type Locale } from '@/i18n/locales';
 
 import { siteSettings } from '@/server/services/settings-service';
@@ -18,9 +20,32 @@ import '@/styles/globals.css';
  * Families and roles: docs/DESIGN-SYSTEM.md section 3.
  */
 
+/**
+ * Fraunces, with three axes the storefront now actually uses.
+ *
+ * `wght` comes by default; `opsz`, `SOFT` and `WONK` have to be asked for, and
+ * the redesign asks because they are what make one typeface cover both jobs the
+ * brand needs:
+ *
+ *   `opsz`   optical size. At the hero's 128px the display cut is wanted —
+ *            thinner hairlines, tighter spacing; at 17px the text cut is. One
+ *            family, set correctly at both ends, instead of two families.
+ *   `SOFT`   softens the terminals. A little of it is the difference between
+ *            "archive serif" and the warmer letterform in the shop's own logo.
+ *   `WONK`   swaps in the swashed alternates — the single-storey `g`, the
+ *            flared `y`. It is the axis that makes the accented word in a hero
+ *            read as *lettering* rather than as italic text, which is the whole
+ *            gesture the layout is built around.
+ *
+ * `italic` is loaded as a real style, not synthesised. The accent word is set
+ * in it on every marketing surface; a browser-slanted roman at 128px is visibly
+ * a slanted roman.
+ */
 const fraunces = Fraunces({
   subsets: ['latin'],
   display: 'swap',
+  style: ['normal', 'italic'],
+  axes: ['SOFT', 'WONK', 'opsz'],
   variable: '--font-fraunces',
 });
 
@@ -155,6 +180,7 @@ export default async function LocaleRootLayout({
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 }>) {
+  const nonce = await scriptNonce();
   const { locale: raw } = await params;
 
   // A path like `/de/shop` matches the segment but is not a language we speak.
@@ -165,18 +191,27 @@ export default async function LocaleRootLayout({
     <html
       lang={LOCALE_TAGS[locale]}
       className={fontVariables}
-      // The stored theme is applied by `ThemeScript` before paint, so the
-      // attribute this adds is expected to differ from the server's output.
+      // `ThemeScript` and `IntroScript` both stamp this element before paint,
+      // so its attributes are expected to differ from the server's output.
       suppressHydrationWarning
     >
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
+        <IntroScript nonce={nonce} />
       </head>
       <body className="min-h-dvh antialiased">
         <a href="#main" className="skip-link">
           {locale === 'en' ? 'Skip to main content' : 'Aller au contenu principal'}
         </a>
         <div className="flex min-h-dvh flex-col">{children}</div>
+
+        {/*
+         * Last in the body, not first: it is `position: fixed` and owns its own
+         * stacking context, so nothing above it in the tree can be painted over
+         * it by accident, and the page's own markup stays the first thing a
+         * crawler and a screen reader meet.
+         */}
+        <Intro />
       </body>
     </html>
   );

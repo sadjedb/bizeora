@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useId, type ReactNode } from 'react';
 
+import { useDictionary } from '@/i18n/client';
 import { cn } from '@/components/ui/cn';
 import { Label, Text } from '@/components/ui/typography';
 
@@ -67,6 +68,7 @@ export function FormField({
   const id = useId();
   const descriptionId = `${id}-description`;
   const errorId = `${id}-error`;
+  const { t } = useDictionary();
   const invalid = Boolean(error);
 
   // The error replaces the description rather than joining it: two messages
@@ -76,7 +78,12 @@ export function FormField({
   return (
     <FieldContext.Provider value={{ invalid }}>
       <div className={cn('flex flex-col gap-2', className)}>
-        <Label htmlFor={id} required={required} optional={optional}>
+        <Label
+          htmlFor={id}
+          required={required}
+          optional={optional}
+          optionalLabel={t.common.optional}
+        >
           {label}
         </Label>
 

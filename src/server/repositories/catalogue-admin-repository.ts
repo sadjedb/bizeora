@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { Prisma } from '@/generated/prisma/client';
+import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/db/client';
 import { toPublicAssetUrl } from '@/lib/media/public-asset';
 import {
@@ -12,6 +12,7 @@ import {
   type StockState,
 } from '@/domain/catalogue';
 import type { DesignSurface } from '@/domain/customization/placement';
+import { publiclyVisibleWhere } from '@/server/repositories/catalogue-repository';
 
 /**
  * The catalogue's **write** path, and the admin's view of it.
@@ -96,6 +97,8 @@ export type AdminProductDetail = {
   isBestSeller: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
+  /** The overlay column, so the form can show what is already translated. */
+  translations: unknown;
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -291,6 +294,7 @@ export async function getAdminProduct(id: string): Promise<AdminProductDetail | 
       isBestSeller: true,
       seoTitle: true,
       seoDescription: true,
+      translations: true,
       publishedAt: true,
       createdAt: true,
       updatedAt: true,
@@ -348,6 +352,7 @@ export async function getAdminProduct(id: string): Promise<AdminProductDetail | 
     isBestSeller: product.isBestSeller,
     seoTitle: product.seoTitle,
     seoDescription: product.seoDescription,
+    translations: product.translations,
     publishedAt: product.publishedAt,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
@@ -556,6 +561,37 @@ function uniqueViolationTarget(error: unknown): string | null {
   return '';
 }
 
+/**
+ * The overlay column, as Prisma wants it written.
+ *
+ * `DbNull` clears the column; `JsonNull` would write the JSON value `null`,
+ * which the check constraint refuses — see `prisma/seed.ts` for the same trap.
+ */
+export function translationWrite(
+  value: Record<string, Record<string, string>> | null,
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return value === null ? Prisma.DbNull : value;
+}
+
+/** The overlay a row already carries, for the merge on save. */
+export async function getProductTranslations(id: string): Promise<unknown> {
+  const row = await prisma.product.findFirst({
+    where: { id, deletedAt: null },
+    select: { translations: true },
+  });
+
+  return row?.translations ?? null;
+}
+
+export async function getCategoryTranslations(id: string): Promise<unknown> {
+  const row = await prisma.category.findFirst({
+    where: { id, deletedAt: null },
+    select: { translations: true },
+  });
+
+  return row?.translations ?? null;
+}
+
 export type ProductWrite = {
   name: string;
   slug: string;
@@ -575,6 +611,8 @@ export type ProductWrite = {
   isBestSeller: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
+  /** The whole overlay column, already merged by the service. */
+  translations?: Prisma.InputJsonValue | typeof Prisma.DbNull;
 };
 
 /**
@@ -1327,4 +1365,209 @@ export async function setPrimaryProductImage(
   ]);
 
   return { ok: true, value: { productId: image.productId } };
+}
+
+/* ---------------------------------------------------------------------------
+ * Categories
+ * ------------------------------------------------------------------------ */
+
+export type AdminCategoryRow = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  position: number;
+  isActive: boolean;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  /** The overlay column, so the form can show what is already translated. */
+  translations: unknown;
+  /** Products of any status that sit in it. */
+  products: number;
+  /** Of those, the ones a customer can see right now. */
+  liveProducts: number;
+};
+
+const CATEGORY_SELECT = {
+  id: true,
+  slug: true,
+  name: true,
+  description: true,
+  position: true,
+  isActive: true,
+  seoTitle: true,
+  seoDescription: true,
+  translations: true,
+  _count: {
+    select: {
+      products: { where: { deletedAt: null } },
+    },
+  },
+} as const;
+
+/**
+ * Both counts, in one extra query rather than one per row.
+ *
+ * Prisma will count a filtered relation inside a `select`, but only once per
+ * relation — and this screen needs two different counts of the same relation:
+ * everything in the category, and the live half of it. The second is a
+ * `groupBy` over the products, joined in memory over a handful of rows.
+ */
+async function liveProductCounts(): Promise<Map<string, number>> {
+  const rows = await prisma.product.groupBy({
+    by: ['categoryId'],
+    where: publiclyVisibleWhere(),
+    _count: { _all: true },
+  });
+
+  return new Map(rows.map((row) => [row.categoryId, row._count._all]));
+}
+
+/**
+ * Every category the workshop has, with what is in it.
+ *
+ * Inactive ones included: this is the screen where somebody turns one back on,
+ * so hiding them here would make that impossible. Soft-deleted ones are
+ * excluded — nothing in the application deletes a category, and the column is
+ * there for a future that has not happened.
+ */
+export async function listAdminCategoryRows(): Promise<readonly AdminCategoryRow[]> {
+  const [rows, live] = await Promise.all([
+    prisma.category.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ position: 'asc' }, { name: 'asc' }],
+      select: CATEGORY_SELECT,
+    }),
+    liveProductCounts(),
+  ]);
+
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    position: row.position,
+    isActive: row.isActive,
+    seoTitle: row.seoTitle,
+    seoDescription: row.seoDescription,
+    translations: row.translations,
+    products: row._count.products,
+    liveProducts: live.get(row.id) ?? 0,
+  }));
+}
+
+export async function getAdminCategory(id: string): Promise<AdminCategoryRow | null> {
+  const [row, live] = await Promise.all([
+    prisma.category.findFirst({
+      where: { id, deletedAt: null },
+      select: CATEGORY_SELECT,
+    }),
+    liveProductCounts(),
+  ]);
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    position: row.position,
+    isActive: row.isActive,
+    seoTitle: row.seoTitle,
+    seoDescription: row.seoDescription,
+    translations: row.translations,
+    products: row._count.products,
+    liveProducts: live.get(row.id) ?? 0,
+  };
+}
+
+export type CategoryWrite = {
+  name: string;
+  slug: string;
+  description: string | null;
+  position: number;
+  isActive: boolean;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  /** The whole overlay column, already merged by the service. */
+  translations?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+};
+
+export type SavedCategoryRow = {
+  id: string;
+  slug: string;
+  /** Non-null only when the write renamed the category's address. */
+  previousSlug: string | null;
+};
+
+export async function createCategory(
+  write: CategoryWrite,
+): Promise<WriteResult<SavedCategoryRow>> {
+  try {
+    const created = await prisma.category.create({
+      data: write,
+      select: { id: true, slug: true },
+    });
+
+    return { ok: true, value: { ...created, previousSlug: null } };
+  } catch (error) {
+    if (uniqueViolationTarget(error) !== null) {
+      return { ok: false, failure: { code: 'SLUG_TAKEN' } };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update a category.
+ *
+ * **No redirect table for a renamed category**, unlike a product. `11.6` gives
+ * products that guarantee because a product URL is what a customer is sent and
+ * what a search engine ranks; a category listing is navigation, reachable from
+ * the chip row on every catalogue page, and building a second redirect table
+ * for it would be machinery for a URL nobody bookmarks. The old address 404s,
+ * which is the honest answer for a shelf that was renamed.
+ *
+ * The previous slug comes back regardless, because the caller has a cached page
+ * at the old address to invalidate.
+ */
+export async function updateCategory(
+  id: string,
+  write: CategoryWrite,
+): Promise<WriteResult<SavedCategoryRow>> {
+  const existing = await prisma.category.findFirst({
+    where: { id, deletedAt: null },
+    select: { slug: true },
+  });
+
+  if (!existing) return { ok: false, failure: { code: 'NOT_FOUND' } };
+
+  try {
+    const saved = await prisma.category.update({
+      where: { id },
+      data: write,
+      select: { id: true, slug: true },
+    });
+
+    return {
+      ok: true,
+      value: {
+        ...saved,
+        previousSlug: existing.slug === saved.slug ? null : existing.slug,
+      },
+    };
+  } catch (error) {
+    if (uniqueViolationTarget(error) !== null) {
+      return { ok: false, failure: { code: 'SLUG_TAKEN' } };
+    }
+    throw error;
+  }
+}
+
+/** How many live products a category holds, for the deactivation rule. */
+export async function countLiveProductsInCategory(categoryId: string): Promise<number> {
+  return prisma.product.count({
+    where: { categoryId, ...publiclyVisibleWhere() },
+  });
 }

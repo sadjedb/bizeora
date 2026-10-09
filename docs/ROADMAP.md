@@ -784,22 +784,210 @@ and the public site agrees within one request. Met.
 
 ---
 
-### Phase 15 — Security Hardening
+### Phase 14.13 — Browsing the catalogue — **done**
 
-**Goal**: the checklist in `SECURITY.md` section 16 is satisfied.
+`/shop` was one grid of everything: no search, no order, no pages, no categories. `UX.md` has
+listed the catalogue as "search, filter, sort, paginate" since section 2 was written, and section 4
+asks for category chips, a sensible default order and a visible filter count. None of it existed,
+because a filter that filters nothing is worse than no filter — and the categories it would filter
+by could only be created from a SQL client.
 
-- Security headers and CSP with nonces
-- Rate limits verified on every listed endpoint
-- Upload pipeline penetration-tested with forged types, oversized files and malicious SVGs
-- IDOR test suite across every customer-owned resource
-- Audit logging verified for file access, PII views and status changes
-- PII scrubbing in logs and error reports
-- Secret scanning and dependency audit in CI
-- Bucket policies verified from an unauthenticated client
+**Delivered**
 
-**Done when**: every box in `SECURITY.md` section 16 is ticked with evidence.
+- **Search, two filters, four orders and pagination**, all of it in the URL and none of it in
+  component state. The search box, the order and the switches are one `GET` form with one button;
+  the categories are links. The catalogue needs no JavaScript to work. ADR-039.
+- **Category listings at `/shop/c/[category]`**, each with its own heading, description, canonical
+  and sitemap entry — a page rather than a filtered view, because "polos" and "casquettes" are what
+  customers actually search for.
+- **One indexable listing.** `/shop` and each category are indexed; every narrowing, reordering and
+  page of them is `noindex, follow` and canonicalises back. The same rule Phase 14 set for the
+  gallery, and the argument for including the page number in it is written in
+  `isDefaultCatalogueView` rather than assumed.
+- **Every filter is a `WHERE`**, availability included — a column-reference comparison so
+  `stock - reserved > 0` runs in Postgres rather than over a fetched list. A filtered count that
+  disagrees with the grid under it is the failure this avoids.
+- **"8 pièces sur 24"** — the filtered count beside the unfiltered one, so a narrow result cannot be
+  mistaken for an empty shop, with the number of active filters and one link that clears them.
+- **A category screen in the workshop** at `/admin/categories`: create, rename, reorder, describe,
+  hide. Two counts per row, because "what is in it" and "what a customer can see" are different
+  questions and the second decides whether it may be hidden.
+- **A category holding live products refuses to be hidden** (`BUSINESS-RULES.md` 11.9), checked
+  against the database at save time rather than against the figure the form was rendered with.
+- **An accessibility fix that was overdue**: `CheckboxField` is a Radix `<button role="checkbox">`,
+  and `<label for>` does not name one — every checkbox in the workshop had no accessible name at
+  all. Now named through `aria-labelledby`, and clickable through Radix's own `Label`.
+
+**Deliberately not done**
+
+- **No accent folding in search.** "brode" does not find "brodé". Doing it properly means the
+  `unaccent` extension and an expression index — a migration for a catalogue of eight products. The
+  limit is recorded in `catalogueWhere`, not hidden.
+- **No relevance ranking.** A search that silently reorders by a score nobody can see is worse than
+  one that says "newest first".
+- **No price-range or colour facets.** Both need an interface that is worth the screen space only
+  once there is a catalogue to justify it.
+- **No caching of the listing queries.** `/shop` costs three indexed reads per request. `/` and
+  `/custom` keep their five-minute cache; adding a tagged cache per filter combination is an
+  optimisation with no measurement behind it yet.
+- **Category nesting.** `parentId` exists in the schema and stays unused — V1 has one level.
+
+**Done when**: a customer can find a product by typing part of its name, narrow the catalogue to
+what they can actually buy, share the result as a link, and walk into a category from the chip row —
+and the owner can create that category without a database client. Met.
 
 ---
+
+### Phase 14.14 — The catalogue speaks English — **done**
+
+The interface, the workshop and the homepage's bands have been bilingual since Phase 14.7. The
+catalogue never was: an English visitor read an English shell wrapped around French product names,
+French category chips, French gallery captions and a French banner. `localiseSection`'s own comment
+said so — "giving them a language is a schema change". This is that change.
+
+**Delivered**
+
+- **A `translations` JSONB column** on `products`, `categories`, `gallery_items` and `banners`,
+  keyed by locale then by the column it overrides, with a check constraint that it is an object or
+  nothing. One migration, four columns. ADR-040.
+- **French is the source and the fallback, field by field.** A product with an English name and no
+  English description reads correctly rather than showing an empty paragraph — which is the state a
+  catalogue is actually in while somebody is translating it, and the state the seed now ships in.
+- **The overlay is applied at the repository boundary**, so a page cannot forget to translate: the
+  only `name` a page can reach is already the right one. Every storefront read carries a locale —
+  the catalogue, the product page, categories, related products, the gallery, the banner and the
+  homepage's bands.
+- **Search follows the reader.** In English, the English name is matched too; the French columns
+  stay searchable so a half-translated catalogue is not half-unsearchable.
+- **An English panel on the product and category forms**, collapsed until wanted, with the French
+  text printed under each box so the translator can see what they are matching. Clearing a box
+  gives the French back — there is no way to translate something to nothing.
+- **The seeded catalogue is translated**, deliberately not completely: two products carry an
+  English name and nothing else, so the fallback is exercised by the data rather than only by a
+  test.
+- **Two accessibility fixes found on the way**: `(optionnel)` was a hard-coded French literal in a
+  shared primitive, so the English workshop said it too; and the English panel's fields repeat
+  their French labels, which is two controls with one name until each carries its language.
+- **Editing anything in the workshop now confirms itself.** Creating navigated, which was its own
+  feedback; editing wrote silently and left the screen unchanged. A toast and a refresh, for
+  products and categories alike.
+
+**Deliberately not done**
+
+- **No translations table.** Better on three counts — sorting, indexed search, a third language —
+  and rejected for two: it is four tables of plumbing for two languages, and the project already
+  chose the overlay once for the homepage. ADR-040 records the trigger for revisiting it.
+- **`ORDER BY name` still sorts by the French name** in both languages.
+- **No translation of option names, colour names or gallery facets.** Facets are filter values
+  shared with the URL; translating one would break the link that carries it.
+- **No machine translation.** A network call on the catalogue's hot path, and product copy written
+  by something that has never seen the garment.
+- **Order and quote snapshots keep the name as it was shown when they were frozen.** That is what a
+  snapshot is for (ADR-010); translating history afterwards would rewrite a receipt.
+
+**Done when**: an English visitor can browse, search and read the catalogue in English, a partly
+translated product reads correctly in both languages, and the owner can write the English from the
+same form they price the product on. Met.
+
+---
+
+### Phase 14.15 — The garment, in three dimensions — **done**
+
+Phase 14.10 asked for "360° you can rotate" and shipped everything except the rotating: the `.glb`
+parser, the public `models/` prefix, the texture-space transform and the server actions were all
+built and tested, and then there was no viewer and no model to put in one. Both halves are here.
+
+**Delivered**
+
+- **`ModelViewer`** — a real WebGL view of the garment, framed from its own bounding sphere,
+  turnable by drag, auto-rotating until somebody takes hold of it, and still under
+  `prefers-reduced-motion`. `three` is imported **inside the effect**, so it lands in its own chunk
+  that is fetched the first time a visitor asks for a 3D view and never otherwise.
+- **The design, composited into the model's UV map** by `texturePlacement` — the function that
+  makes ADR-035's claim true rather than aspirational. The same four percentages that position
+  artwork over a photograph position it on the model, and the composite happens on a 2D canvas
+  precisely so it produces the same pixels as the preview the customer just dragged.
+- **A media switcher on the product page**: photographs first, `360°` beside them, and **no tabs at
+  all** on a product with no model.
+- **A generated demo garment** (`scripts/make-demo-model.ts`) — a torso box with a collar band,
+  written as real binary glTF with two materials and a UV map whose front face fills the 0–1
+  square. Not a garment anybody would photograph; a file that proves every claim the phase makes,
+  and keeps proving them after a real model arrives.
+- **The admin's model card**, which Phase 14.10 recorded as missing. The file is **read twice**:
+  once without storing anything, to list the materials the operator chooses between, and once on
+  upload, to verify the choice against the file (ADR-036).
+- **Failure states in words.** No WebGL, a model that 404s, a material name the file does not
+  declare — each says what happened, with the photograph still underneath. A black rectangle is
+  indistinguishable from a broken site.
+
+**Deliberately not done**
+
+- **No 3D in the builder.** The customer still places their design on a photograph; the model shows
+  the result. Dragging artwork across a UV seam is a different interaction with different failure
+  modes, and the 2D editor is the one that has been used.
+- **No poster generation.** `posterKey` exists and nothing writes it; the first photograph stands in.
+  Rendering a still server-side means a headless GPU.
+- **No variant-specific models.** The schema allows one per colourway and the storefront shows one
+  per product.
+- **No real garment models.** The owner commissions those. Everything they need is built, and the
+  demo file is what the tests run against so a regression is caught without one.
+
+**Done when**: a customer can turn the garment on the product page, the design lands where the
+placement says it does, and the owner can attach a model without a developer. Met.
+
+---
+
+### Phase 15 — Security Hardening — **partly done**
+
+Two items in `SECURITY.md` were marked "not yet implemented" and had been since Phase 0: the
+Content-Security-Policy, and rate limiting. Both are built. The rest of section 16's checklist was
+already true and is now ticked with evidence rather than assumed.
+
+**Delivered**
+
+- **A nonce-based CSP**, minted per request in the middleware and carried on every inline script —
+  Next's hydration payload, the theme script and the JSON-LD block. `script-src` has no
+  `'unsafe-inline'`; `'strict-dynamic'` is what lets a code-split application survive that.
+  Verified in a browser across every storefront route with zero violations. ADR-041.
+- **The cost, taken deliberately**: a nonce is request data, so nothing under the storefront layout
+  is prerendered any more. ADR-041 argues why a permanent property of every page is worth more than
+  ISR on two of them, and records that ADR-038's staff-preview exception becomes possible again as
+  a result.
+- **Rate limiting**, as `SECURITY.md` section 9's table: the limits in `domain/rate-limit`, the
+  counter in `lib/rate-limit`, and `throttle` at the call site. Enforced on **login**, **registration**,
+  **design upload** and the **guest order lookup** — the four the checklist names.
+- **A counter that cannot be beaten by concurrency.** The window's start is part of the key, so
+  incrementing is one atomic `INSERT … ON CONFLICT DO UPDATE`; ten simultaneous attempts against a
+  limit of three produce exactly three allowances, and that is what the integration suite asserts.
+- **Postgres, not Redis**, and deliberately: section 9 names Postgres as the fallback, and the
+  fallback is the half that can exist in this deployment today. `consume` is the seam.
+- **A dependency audit that reports zero.** Four high advisories in the Prisma CLI's transitive tree
+  were closed with `overrides` rather than by taking npm's suggested downgrade to Prisma 6.
+- **The guest order lookup answers a 404, not a "slow down"**, when it is limited. Telling an
+  enumerator they were rate limited tells them the endpoint is worth attacking.
+
+**Deliberately not done**
+
+- **The remaining rows of the limit table are defined and not yet wired** — password reset (no
+  screen exists), custom request submission, review submission, quote accept/reject, coupons, admin
+  mutations. The limits are in `domain/rate-limit`; connecting them is one line each.
+- **No Redis.** The adapter seam exists; the service does not.
+- **`style-src` keeps `'unsafe-inline'`.** Closing it means a design-system change.
+- **The private bucket's policy is not verified from an unauthenticated client**, because there is
+  no bucket — storage is the filesystem adapter. It stays unticked rather than being ticked on an
+  argument.
+- **No penetration test of the upload pipeline beyond what the suite already covers** — forged
+  types, magic-number disagreement and oversized files are tested in `tests/unit/media` and
+  `tests/integration/design-file`; an adversarial pass by somebody who did not write it is a
+  different exercise.
+- **No secret scanning in CI**, and no CI to put it in.
+
+**Done when**: every box in `SECURITY.md` section 16 is ticked with evidence. **Not met** — the
+bucket policy, PII scrubbing verification and the audit-log verification remain, and are listed
+above rather than quietly dropped.
+
+---
+
 
 ### Phase 16 — Testing
 

@@ -22,6 +22,7 @@ import { Link } from '@/components/ui/link';
 import { Breadcrumbs, Pagination, TabSet } from '@/components/ui/navigation';
 import { Modal, ModalClose } from '@/components/ui/overlay';
 import { Heading, Label, Text } from '@/components/ui/typography';
+import { Marquee, SpinningBadge } from '@/components/ui/motion';
 
 describe('Button', () => {
   it('renders a real button element, not a div with a handler', () => {
@@ -355,5 +356,135 @@ describe('Navigation', () => {
       <Pagination page={1} totalPages={1} hrefFor={() => '#'} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+/**
+ * The redesign's continuous motion (Phase 16).
+ *
+ * Two properties are worth a test and neither is visible in a screenshot: that
+ * an infinite animation is *stopped* rather than accelerated when the reader
+ * asked for less motion, and that duplicating the marquee's content to make the
+ * loop seamless does not double what a screen reader announces.
+ */
+describe('Marquee', () => {
+  it('renders its content twice but announces it once', () => {
+    render(<Marquee items={['Brodé main', 'Pièce unique']} />);
+
+    // Both runs are in the DOM — that is what makes the loop seamless.
+    expect(screen.getAllByText('Brodé main')).toHaveLength(2);
+
+    // Only one of them is reachable. `getAllByRole` ignores the aria-hidden
+    // subtree, so a second list here would mean the strip is read twice.
+    expect(screen.getAllByRole('listitem', { hidden: false })).toHaveLength(2);
+  });
+
+  it('stops under reduced motion rather than running faster', () => {
+    const { container } = render(<Marquee items={['Brodé main']} />);
+
+    const track = container.querySelector('.animate-marquee');
+    expect(track).not.toBeNull();
+    // The global stylesheet crushes animation *durations*; for an infinite
+    // animation that is a seizure, not a stop. The component has to opt out.
+    expect(track).toHaveClass('motion-reduce:animate-none');
+  });
+
+  it('derives its duration from how much text it carries', () => {
+    const { container: short } = render(<Marquee items={['Alger']} />);
+    const { container: long } = render(
+      <Marquee items={['Broderie sur mesure', 'Livraison 58 wilayas', 'Devis en 6 h']} />,
+    );
+
+    const duration = (node: Element | null) =>
+      Number(
+        (node as HTMLElement | null)?.style
+          .getPropertyValue('--marquee-duration')
+          .replace('s', ''),
+      );
+
+    // Same pixels per second, not the same seconds — a long strip that
+    // finished in the same time as a short one would visibly sprint.
+    expect(duration(long.querySelector('.animate-marquee'))).toBeGreaterThan(
+      duration(short.querySelector('.animate-marquee')),
+    );
+  });
+
+  it('renders nothing at all when it has no words', () => {
+    const { container } = render(<Marquee items={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('SpinningBadge', () => {
+  it('hides its ring from assistive technology and stops under reduced motion', () => {
+    const { container } = render(<SpinningBadge text="BRODÉ À ALGER · " />);
+
+    const svg = container.querySelector('svg');
+    // The ring is the same words three times over, bent round a circle. It is
+    // decoration; the page says what it means in text.
+    expect(svg).toHaveAttribute('aria-hidden', 'true');
+    expect(svg).toHaveClass('motion-reduce:animate-none');
+  });
+
+  it('keeps its centre content readable', () => {
+    render(
+      <SpinningBadge text="· " size={96}>
+        12
+      </SpinningBadge>,
+    );
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The font-size tokens survive a tone.
+ *
+ * `cn.ts` carries its own list of our font-size tokens, because tailwind-merge
+ * files any `text-*` it does not recognise as a *colour* — so `cn(size, tone)`
+ * silently deletes the size. That bug has now been introduced twice: once when
+ * the scale was built, and once in Phase 16 when `display-3xl` was added to
+ * `tokens.css` and not to `cn.ts`, which made the new hero render at body size.
+ *
+ * This is the guard. It iterates the variants rather than naming them, so the
+ * next token added to the scale is covered by this test on the day it is added
+ * and fails here rather than in a screenshot.
+ */
+describe('The type scale', () => {
+  const VARIANTS = [
+    'display-3xl',
+    'display-2xl',
+    'display-xl',
+    'display-lg',
+    'display-md',
+    'heading-lg',
+    'heading-md',
+    'heading-sm',
+    'body-lg',
+    'body',
+    'body-sm',
+    'caption',
+    'overline',
+    'mono',
+    'mono-sm',
+  ] as const;
+
+  it.each(VARIANTS)('keeps its size when %s is given a tone', (variant) => {
+    render(
+      <Text variant={variant} tone="muted">
+        {variant}
+      </Text>,
+    );
+
+    expect(screen.getByText(variant)).toHaveClass(`text-${variant}`);
+  });
+
+  it.each(VARIANTS)('keeps its size when %s is a heading with a width', (variant) => {
+    render(
+      <Heading level={2} variant={variant} className="max-w-[13ch]">
+        {`h-${variant}`}
+      </Heading>,
+    );
+
+    expect(screen.getByText(`h-${variant}`)).toHaveClass(`text-${variant}`);
   });
 });

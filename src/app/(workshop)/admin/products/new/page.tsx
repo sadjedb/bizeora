@@ -76,6 +76,7 @@ export default async function NewProductPage() {
             isBestSeller: false,
             seoTitle: '',
             seoDescription: '',
+            translations: null,
           }}
         />
       )}

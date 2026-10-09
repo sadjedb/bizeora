@@ -14,6 +14,7 @@ import { LOCALES } from '@/i18n/locales';
 import { requireStaff } from '@/server/auth/guards';
 import {
   addProductOption,
+  collectTranslation,
   integerField,
   optionalText,
   saveProduct,
@@ -30,6 +31,7 @@ import {
 } from '@/server/services/media-service';
 import {
   attachProductModel,
+  readModelMaterials,
   removeProductModel,
   setModelSettings,
 } from '@/server/services/model3d-service';
@@ -145,6 +147,12 @@ export async function saveProductAction(
 
   const result = await saveProduct({
     productId,
+    // One language at a time: the form shows English beside French, and the
+    // service merges it over whatever the column already holds.
+    translation: {
+      locale: 'en',
+      values: collectTranslation(form, 'en', 'product'),
+    },
     draft: {
       name,
       slug,
@@ -167,12 +175,14 @@ export async function saveProductAction(
     },
   });
 
-  if (!result.ok) return { errors: result.errors };
+  if (!result.ok) {
+    return { errors: result.errors, translationErrors: result.translationErrors };
+  }
 
   revalidateStorefront([result.value.slug, result.value.previousSlug]);
   revalidatePath(`/admin/products/${result.value.id}`);
 
-  return { errors: {}, savedId: result.value.id };
+  return { errors: {}, savedId: result.value.id, savedAt: Date.now() };
 }
 
 type SimpleResult = { ok: true } | { ok: false; message: string };
@@ -445,6 +455,39 @@ export async function uploadProductModelAction(
 
   revalidateProduct(productId);
   return { ok: true };
+}
+
+/**
+ * What a file declares, without storing any of it.
+ *
+ * So the upload screen can ask "which of these do you embroider?" **before** the
+ * model is attached. The bytes are parsed and dropped; nothing reaches storage
+ * and nothing reaches the database, which is what makes this safe to call on a
+ * file the operator may yet decide against.
+ */
+export async function readModelMaterialsAction(
+  form: FormData,
+): Promise<
+  | { ok: true; materials: readonly string[]; suggested: string | null }
+  | { ok: false; message: string }
+> {
+  const permitted = await authorise();
+  if (!permitted.ok) return { ok: false, message: permitted.message };
+
+  const file = form.get('file');
+  if (!(file instanceof File)) return { ok: false, message: 'Envoi incomplet.' };
+
+  if (file.size > MAX_MODEL_BYTES) {
+    return {
+      ok: false,
+      message: `Le fichier dépasse ${Math.round(MAX_MODEL_BYTES / (1024 * 1024))} Mo.`,
+    };
+  }
+
+  const result = readModelMaterials(new Uint8Array(await file.arrayBuffer()));
+  if (!result.ok) return { ok: false, message: result.message };
+
+  return { ok: true, ...result.value };
 }
 
 export async function updateProductModelAction(input: {

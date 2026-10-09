@@ -22,11 +22,12 @@ import { StorefrontClosed } from './storefront-closed';
  * **And no staff exception.** An earlier version let signed-in staff through to
  * the real site with a banner, and it could not work: recognising them means
  * reading a cookie, reading a cookie makes the render request-specific, and
- * three of these pages are prerendered and revalidated every five minutes
- * (`revalidate = 300`). Next refuses that combination outright — the pages
- * returned 500 the moment the shop closed. Rather than give up the cache that
- * makes the catalogue fast, the shop closes to everybody: an owner who wants to
- * look at it opens it, which takes one click and takes effect immediately.
+ * pages under this layout are prerendered and revalidated every five minutes
+ * (`revalidate = 300` on `/` and `/custom`; `/shop` joined them until Phase
+ * 14.13 gave it a search box). Next refuses that combination outright — the
+ * pages returned 500 the moment the shop closed. Rather than give up the cache,
+ * the shop closes to everybody: an owner who wants to look at it opens it,
+ * which takes one click and takes effect immediately.
  */
 export default async function StorefrontLayout({
   children,

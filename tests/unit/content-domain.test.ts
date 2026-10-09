@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import {
   HOMEPAGE_SECTION_TYPES,
+  MAX_MARQUEE_WORDS,
   MAX_SECTION_ITEMS,
   activeBanners,
   collectDataNeeds,
   commonConfig,
   dataNeeds,
+  headingSegments,
   heroConfig,
   localiseSection,
+  marqueeConfig,
   isHomepageSectionType,
   listConfig,
   orderedSections,
+  plainHeading,
   pointsConfig,
   whyUsConfig,
   type Banner,
@@ -52,8 +56,8 @@ function section(overrides: Partial<HomepageSection> = {}): HomepageSection {
 }
 
 describe('the section types', () => {
-  it('lists eleven, and recognises exactly those', () => {
-    expect(HOMEPAGE_SECTION_TYPES).toHaveLength(11);
+  it('lists twelve, and recognises exactly those', () => {
+    expect(HOMEPAGE_SECTION_TYPES).toHaveLength(12);
 
     for (const type of HOMEPAGE_SECTION_TYPES) {
       expect(isHomepageSectionType(type)).toBe(true);
@@ -346,5 +350,124 @@ describe('localiseSection', () => {
     const english = localiseSection(french, 'en');
 
     expect(Object.keys(english.config as Record<string, unknown>)).not.toContain('en');
+  });
+});
+
+/**
+ * The accented word (Phase 16).
+ *
+ * The emphasis in a marketing heading is content rather than code, because the
+ * word that carries it is in a different place in each language. This is the
+ * whole of the markup the system understands, which is why the failure modes
+ * matter more than the happy path: a typo in a heading must show the heading,
+ * never a broken page and never a stray asterisk.
+ */
+describe('headingSegments', () => {
+  it('splits a heading on its emphasised word', () => {
+    expect(headingSegments('Vos idées, *brodées.*')).toEqual([
+      { text: 'Vos idées, ', accent: false },
+      { text: 'brodées.', accent: true },
+    ]);
+  });
+
+  it('keeps the text on both sides when the emphasis is in the middle', () => {
+    expect(headingSegments('A cafe that feels like *home* today')).toEqual([
+      { text: 'A cafe that feels like ', accent: false },
+      { text: 'home', accent: true },
+      { text: ' today', accent: false },
+    ]);
+  });
+
+  it('leaves a heading with no markup alone', () => {
+    expect(headingSegments('Ce que nous avons brodé')).toEqual([
+      { text: 'Ce que nous avons brodé', accent: false },
+    ]);
+  });
+
+  it('shows what was typed when the pair is not closed', () => {
+    // A lone asterisk is a typo. Rendering the heading as written is a smaller
+    // failure than swallowing half of it.
+    expect(headingSegments('Vos idées, *brodées.')).toEqual([
+      { text: 'Vos idées, *brodées.', accent: false },
+    ]);
+  });
+
+  it('ignores an empty emphasis', () => {
+    expect(headingSegments('Deux mots ** ici')).toEqual([
+      { text: 'Deux mots ** ici', accent: false },
+    ]);
+  });
+
+  it('interprets only the first pair, and nothing else', () => {
+    // Not Markdown. A second pair is literal text, because a heading field
+    // that renders arbitrary markup is one somebody puts an image in.
+    expect(headingSegments('*un* et *deux*')).toEqual([
+      { text: 'un', accent: true },
+      { text: ' et *deux*', accent: false },
+    ]);
+  });
+
+  it('has no segments at all for an absent heading', () => {
+    expect(headingSegments(null)).toEqual([]);
+  });
+});
+
+describe('plainHeading', () => {
+  it('strips the markup for places that need a string', () => {
+    // A `<title>`, an `aria-label`, a JSON-LD node. An asterisk in a search
+    // result is the bug this exists to prevent.
+    expect(plainHeading('Vos idées, *brodées.*')).toBe('Vos idées, brodées.');
+  });
+
+  it('passes a plain heading through unchanged', () => {
+    expect(plainHeading('Notre travail')).toBe('Notre travail');
+  });
+
+  it('stays null for an absent heading', () => {
+    expect(plainHeading(null)).toBeNull();
+  });
+});
+
+/**
+ * The marquee's phrases (Phase 16).
+ *
+ * One `longText` field split on newlines rather than a repeater control, so the
+ * parsing is where the correctness lives: what a textarea hands over is
+ * whatever somebody typed, including the trailing newline it gives you for
+ * free.
+ */
+describe('marqueeConfig', () => {
+  it('reads one phrase per line', () => {
+    expect(marqueeConfig({ words: 'Brodé main\nPièce unique\nAlger' }).words).toEqual([
+      'Brodé main',
+      'Pièce unique',
+      'Alger',
+    ]);
+  });
+
+  it('drops blank lines and trims', () => {
+    // A trailing newline is what a textarea produces by itself, and an empty
+    // item in the strip is a gap nobody can explain.
+    expect(marqueeConfig({ words: '  Alger  \n\n\nOran\n' }).words).toEqual([
+      'Alger',
+      'Oran',
+    ]);
+  });
+
+  it('caps how many phrases a strip may carry', () => {
+    const many = Array.from({ length: 40 }, (_, i) => `mot ${i}`).join('\n');
+    expect(marqueeConfig({ words: many }).words).toHaveLength(MAX_MARQUEE_WORDS);
+  });
+
+  it('caps the length of one phrase', () => {
+    const long = 'x'.repeat(200);
+    expect(marqueeConfig({ words: long }).words[0]!.length).toBeLessThanOrEqual(48);
+  });
+
+  it('is empty for a band nobody has written yet', () => {
+    expect(marqueeConfig({}).words).toEqual([]);
+    expect(marqueeConfig(null).words).toEqual([]);
+    expect(marqueeConfig({ words: 42 }).words).toEqual([]);
+    expect(marqueeConfig({ words: '   \n  ' }).words).toEqual([]);
   });
 });

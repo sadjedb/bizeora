@@ -29,10 +29,12 @@ import { requireStaff } from '@/server/auth/guards';
 import {
   getAdminProduct,
   listAdminCategories,
+  listProductModels,
 } from '@/server/repositories/catalogue-admin-repository';
 
 import { ProductForm } from '../product-form';
 import { ProductImages } from './product-images';
+import { ProductModels } from './product-models';
 import { ProductStatusActions } from './status-actions';
 import { AddOptionButton, VariantDialog } from './variant-editor';
 
@@ -79,9 +81,10 @@ export default async function AdminProductPage({
   if (!authorisation.ok) notFound();
 
   const { productId } = await params;
-  const [product, categories] = await Promise.all([
+  const [product, categories, models] = await Promise.all([
     getAdminProduct(productId),
     listAdminCategories(),
+    listProductModels(productId),
   ]);
 
   if (!product) notFound();
@@ -146,6 +149,7 @@ export default async function AdminProductPage({
           isBestSeller: product.isBestSeller,
           seoTitle: product.seoTitle ?? '',
           seoDescription: product.seoDescription ?? '',
+          translations: product.translations,
         }}
       />
 
@@ -335,6 +339,8 @@ export default async function AdminProductPage({
          * (`server/services/media-service`).
          */}
         <ProductImages productId={product.id} images={product.images} />
+
+        <ProductModels productId={product.id} models={models} />
       </section>
     </Stack>
   );

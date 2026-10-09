@@ -116,9 +116,9 @@ NotificationChannel     EMAIL | WHATSAPP | SMS | IN_APP
 NotificationStatus      PENDING | SENT | FAILED | SKIPPED
 
 ActorType               CUSTOMER | ADMIN | SYSTEM
-HomepageSectionType     HERO | CATEGORY_GRID | HOW_IT_WORKS | CUSTOM_CTA
-                        | FEATURED_PRODUCTS | GALLERY | WHY_US | REVIEWS
-                        | SOCIAL | BANNER | FINAL_CTA
+HomepageSectionType     HERO | MARQUEE | CATEGORY_GRID | HOW_IT_WORKS
+                        | CUSTOM_CTA | FEATURED_PRODUCTS | GALLERY | WHY_US
+                        | REVIEWS | SOCIAL | BANNER | FINAL_CTA
 SettingType             STRING | NUMBER | BOOLEAN | JSON | MONEY
 ```
 
@@ -292,6 +292,35 @@ blocks an order.
 `createdAt`, `updatedAt`, `deletedAt`.
 Indexes: `(slug) unique partial`, `(parentId, position)`, `(isActive)`.
 
+Editable from `/admin/categories` since Phase 14.13; before that the only way to
+make one was a SQL client, and the product form carried a warning saying so.
+`position` orders the chip row on `/shop`; `isActive` off removes the category
+from the chips and makes `/shop/c/<slug>` a 404, which is why a category holding
+live products refuses to be switched off (`BUSINESS-RULES.md` 11.9). `parentId`
+is still unused — V1 has one level — and nothing deletes a category, so
+`deletedAt` remains a column for a future that has not happened.
+
+**A renamed category leaves no redirect**, unlike a renamed product: there is no
+`category_redirects` table and deliberately so (11.10).
+
+`translations` (JSONB, nullable) carries the English overlay — see the note under `products`; the
+same column exists on `products`, `gallery_items` and `banners`.
+
+### `rate_limits`
+
+`key` text PK, `count` integer NOT NULL default 0, `expiresAt` timestamptz NOT NULL.
+Indexes: `(expiresAt)`. CHECK: `count >= 0`.
+
+One fixed window of one rate-limited action, for one subject. **The window's start is part of the
+key** — `<action>:<subject kind>:<subject>:<window start in seconds>` — which turns incrementing a
+counter into a single atomic `INSERT … ON CONFLICT DO UPDATE` rather than a read-modify-write that
+two simultaneous requests can both win. See `SECURITY.md` section 9 and the migration for the
+trade-offs of a fixed window.
+
+Rows are dead the moment their window closes; the notification dispatcher sweeps them on the same
+tick rather than earning a scheduled job of its own. The table is deliberately absent from
+`prisma/demo-seed.sql`: a demonstration database should start with nobody throttled.
+
 ### `collections` _(V1.5)_
 
 Same shape as categories minus the hierarchy, plus `publishedAt`. Joined through
@@ -321,6 +350,8 @@ Same shape as categories minus the hierarchy, plus `publishedAt`. Joined through
 | ratingAverage                            | integer NULL                   | Denormalised, x100 (e.g. 465 = 4.65)                                         |
 | ratingCount                              | integer NOT NULL default 0     | Denormalised; recomputed on moderation                                       |
 | seoTitle / seoDescription / ogImageKey   |                                |                                                                              |
+| translations                             | jsonb NULL                     | English overlay, keyed by locale then column. CHECK: object or NULL. ADR-040 |
+| _(models)_                               | see `product_models_3d`        | The garment's `.glb`, read by the product page's 360° view since Phase 14.15 |
 | publishedAt                              | timestamptz NULL               |                                                                              |
 | createdAt / updatedAt / deletedAt        |                                |                                                                              |
 
@@ -1089,6 +1120,19 @@ In use since Phase 13: the homepage **is** these rows, ordered by `position` and
 is read through `domain/content`, which returns well-formed defaults for anything malformed —
 a bad JSON edit costs a band some of its content, never the page.
 
+**`MARQUEE` was added in Phase 16** — the twelfth type, and the only schema change the whole
+redesign needed, which is the clearest evidence ADR-027 was the right call. Its `config.words` is
+one string holding one phrase per line, split by `marqueeConfig` and capped at twelve phrases of
+forty-eight characters. A string rather than a JSON array because the admin edits it in a textarea
+and one-per-line is how anybody would write the list down. Nothing queries it, which is the test
+`config` has to pass.
+
+The same migration restored `customization_configs_design_surface_image_id_idx`, which had been
+created by hand in `20260909210000_visual_placement` and never declared in `schema.prisma`. Every
+migration generated after it wanted to drop the index, and in Phase 16 one of them did. **An index
+created in hand-written migration SQL has to be declared in the Prisma schema as well**, or it is
+live only until the next `migrate dev`.
+
 ### `banners`
 
 `id`, `message`, `href` NULL, `variant`, `startsAt`, `endsAt` NULL, `isActive`, `position`.
@@ -1436,3 +1480,17 @@ verification rows, and no password values at all.
 
 Seeded settings values are those in the section 14 table. Percentage settings are seeded as basis
 points; a seed writing `0.5` for `depositPercent` is a defect, not a rounding difference.
+
+**`prisma/demo-seed.sql` is the same data as SQL, plus the administrator the seed deliberately
+omits.** It exists for a machine that has a database but no Node — a laptop running a build for a
+client, most often — and it is a `pg_dump` of a freshly migrated and seeded database rather than a
+hand-written script, so it cannot drift from the schema without the dump being regenerated. It
+needs the migrations applied first, a superuser (it disables foreign-key triggers while it loads,
+because the tables reference each other in both directions), and an otherwise empty database. Every
+statement ends in `ON CONFLICT DO NOTHING`, so running it twice changes nothing the second time.
+
+The administrator it creates — `admin@gmail.com`, password `admin@gmail.com`, in
+`prisma/demo-admin.sql` on its own — is **a demonstration credential and a back door**. The
+password is in the repository; the account has to be deleted before the site is reachable from
+anywhere but the machine it was made for. It is the exception that proves the paragraph above, not
+a change to it: `prisma/seed.ts` still creates no user at all.

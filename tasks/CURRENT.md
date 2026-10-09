@@ -2,19 +2,507 @@
 
 ## Current Sprint / Focus
 
-**Phase 14.12 — The settings screen. Complete.**
+**Phase 16 — The redesign. 16.1 to 16.5 are done. 16.6 is outstanding.**
 
-The `settings` table had been read since Phase 2 and edited from a SQL client.
-The owner asked for a screen: rename the shop, turn the client side on and off,
-turn e-mail verification on and off. There is one now, at `/admin/settings`,
-admin-only, and the two ADRs it produced are about what it is allowed to write
-(ADR-037) and about what "turn the client side off" has to mean when the
-storefront is cached (ADR-038).
+The owner supplied four references and asked for a full redesign of the
+storefront:
 
-The next thing worth building is the **3D viewer** Phase 14.10 left on the
-shelf: the `.glb` parser, the public `models/` prefix and the texture-space
-transform are all built and tested, and nothing renders a garment yet. After
-that, Phase 15.
+| Reference                   | What was taken from it                                 |
+| --------------------------- | ------------------------------------------------------ |
+| `sons.visionwebdevs.tech`   | Structure and motion — the whole layout vocabulary     |
+| `stickerei.com/en/designer` | The placement editor's presentation                    |
+| `embroideryli.com/order`    | A stitch-effect preview of the customer's own artwork  |
+| `instagram.com/bizeora.co`  | The palette, the photography and the voice             |
+
+**The decision the owner made, in one line: sons' structure, Bizeora's skin.**
+The layout vocabulary is borrowed wholesale — a display hero with one italic
+word in the accent, a floating pill header, a tilted marquee strip, large
+rounded photographic cards, an inverse closing card and scroll reveals. The
+*colour and type* are Bizeora's own: ivory ground, near-black ink, brass
+replacing madder, because the feed is marble, black garments and gold —
+"LUXURY EMBROIDERY" is what the account calls itself, and the reference's
+orange-red is somebody else's brand.
+
+Two ADRs came out of it: **ADR-042** (radius splits by surface — the storefront
+is rounded, the workshop is not) and **ADR-043** (the embroidery preview is a
+rendering, never a file).
+
+---
+
+## TASK-032: Phase 16 — The redesign
+
+Status: 16.1–16.5 DONE, 16.6 OUTSTANDING
+
+Related docs: `DESIGN-SYSTEM.md` sections 3, 4, 7 and 10, `UX.md` section 5,
+`DATABASE.md` (`homepage_sections`), ADR-042, ADR-043
+
+### What shipped
+
+| Phase | Scope                                                                |
+| ----- | -------------------------------------------------------------------- |
+| 16.1  | Tokens re-dyed to ivory/ink/brass, Fraunces axes, three new motion primitives, floating pill header, inverse footer |
+| 16.2  | The homepage — twelve bands re-cut, plus the `MARQUEE` band type     |
+| 16.3  | The shop — catalogue chips, product cards, the detail gallery        |
+| 16.4  | The stitch preview — the artwork rendered as embroidery              |
+| 16.5  | The placement editor — faces as photographs rather than as words     |
+
+### The things worth remembering
+
+- **The whole redesign needed one migration, and it was for a feature.** Every
+  band was re-cut without touching `homepage_sections`, which is ADR-027
+  vindicated: the only schema change was adding `MARQUEE`, a *new* band.
+- **Two redesigns have now re-dyed this system without touching a component,**
+  because no component has ever contained a colour.
+- **The accented word is content, not code.** `Vos idées, *brodées.*` — one pair
+  of asterisks in the row, parsed by `headingSegments`. It has to be content
+  because the emphasised word is in a different position in each language.
+  Nothing else in the field is interpreted; a heading that rendered arbitrary
+  markup is a heading somebody eventually puts an image in.
+- **The scroll reveal is a view timeline, not an observer.** No JavaScript, no
+  hydration, three guards — `@supports`, `prefers-reduced-motion: no-preference`
+  and `screen` — and where any of them fails the content is simply *there*. An
+  infinite animation under reduced motion must be **stopped**, not shortened:
+  the global 0.01ms rule turns a marquee into a seizure, so the two infinite
+  components carry `motion-reduce:animate-none` themselves.
+- **`cn.ts` carries its own list of font-size tokens and it bit again.**
+  `display-3xl` was added to `tokens.css` and not to `cn.ts`, so tailwind-merge
+  filed it as a colour and the tone deleted it — the new hero rendered at body
+  size. There is now a test that iterates every variant and asserts it survives
+  a tone, so the next token is covered on the day it is added.
+- **The stitch effect took three models, and the first two are in the tests.**
+  Multiplying the pixel by a factor makes the effect proportional to the
+  colour: it hatches white into an etching and leaves black perfectly flat,
+  which is fatal because most logos sent to an embroiderer are black. Shadow and
+  sheen are **quantities of light**, subtracted and added in bytes. Separately,
+  quantising each channel independently fringes neutrals into pink and yellow;
+  the palette reduces *luminance* and scales all three channels together.
+- **Accent colour must be measured against the tinted grounds, never white.**
+  Brass at 4.6:1 passes on `bg` and fails on `bg-subtle` and `accent-subtle`,
+  where most small accent text actually sits. Warming the neutrals also took
+  `ink-500` — the documented contrast floor — to 4.34:1 on the admin's sunken
+  surface. The axe checks in the end-to-end suite caught both within the hour.
+- **The e2e suite reuses a dev server if one is listening on its port**, and
+  then silently tests development instead of the production build. Stop
+  `npm run dev` before `npm run e2e`.
+- **A hand-written index must also be declared in `schema.prisma`.**
+  `customization_configs_design_surface_image_id_idx` was created in raw SQL in
+  Phase 14.10 and never declared, so every migration generated afterwards wanted
+  to drop it — and this phase's did. Restored, and the declaration added so it
+  cannot recur.
+
+### Validation
+
+- 1230 unit and integration tests (72 new: the heading parser, the marquee
+  parser, the stitch model, the motion primitives, and the type-scale guard).
+- 193 end-to-end tests, including the axe audits on every storefront route, the
+  admin and the design-system showcase, at desktop and phone widths.
+- `npm run lint`, `npx tsc --noEmit`, `prettier --check` clean.
+
+### 16.6 — what is outstanding
+
+- **The account portal and checkout are unchanged.** They still use tight radii
+  and `size="lg"` square buttons, so they read as the old design next to the
+  shop. Nothing is broken; it is inconsistent.
+- **The 3D viewer does not show the stitch effect.** Deliberate, and recorded in
+  ADR-043: the model's UV compositing is a different path, and doing it properly
+  means the stitch direction should follow the garment's surface rather than the
+  screen.
+- **No safe-area frame in the placement editor.** The reference draws the
+  maximum embroidery area as a rectangle on the garment. We cannot: nothing
+  stores where that area *is* — only how wide the garment is. It needs
+  `product_images.safe_area_*` columns and a workshop control to set them.
+- **No preloader.** The reference opens with a brand mark and a counter. It is
+  deliberately not built: it delays the Largest Contentful Paint on a shop, and
+  `DESIGN-SYSTEM.md` section 10 now lists preloaders beside the other things the
+  system does not do. Worth raising with the owner rather than assuming.
+- **The real photography is still placeholders.** Every composition here is
+  built around pictures the owner has not supplied yet; the hero, the category
+  tiles and the gallery will change character when they arrive.
+- **`prettier --check` on `prisma/schema.prisma`** — the Prisma formatter and
+  Prettier disagree about the file; not introduced here, but noticed.
+
+---
+
+---
+
+
+## Previous sprint
+
+**Phase 15 — Security Hardening. Partly done.**
+
+Two items in `SECURITY.md` had been marked "not yet implemented" since Phase 0:
+the Content-Security-Policy and rate limiting. Both are built. What remains of
+section 16's checklist is listed in the roadmap entry and in TASK-031 below,
+rather than being quietly dropped — the bucket policy cannot be verified because
+there is no bucket, and CI cannot run secret scanning because there is no CI.
+
+**The four-phase run the owner asked for in one message is complete**: catalogue
+browsing (14.13), the bilingual catalogue (14.14), the 3D viewer (14.15) and
+this. Two items were explicitly deferred at the owner's instruction and remain
+**not** in scope: the password-reset and e-mail confirmation screens, and
+configuring a mail provider.
+
+**The most consequential change in this phase is not a feature.** A nonce is
+request data, so nothing under the storefront layout is prerendered any more
+(ADR-041). Every page renders per request in 20–40 ms, and the class of bug
+where a cached page disagrees with the database — three debugging sessions
+across Phases 14.8, 14.12 and 14.13 — is gone rather than narrowed.
+
+---
+
+## TASK-031: Phase 15 — A real CSP, and rate limiting
+
+Status: PARTLY DONE
+
+Related docs: `docs/SECURITY.md` sections 9, 12 and 16, `docs/ROADMAP.md` Phase
+15, ADR-041
+
+### The Content-Security-Policy
+
+What shipped before was four directives in `next.config.ts` chosen because they
+cannot break anything, with a comment saying the real policy was Phase 15's
+work. The real policy is a nonce minted per request in the middleware, carried
+on Next's hydration payload, the theme script and the JSON-LD block, with
+`'strict-dynamic'` so a code-split application survives a `script-src` that has
+no `'unsafe-inline'`.
+
+**The trade is structural and is the reason this is an ADR.** Next streams
+hydration through inline scripts whose content differs per page; the only ways
+to allow them are `'unsafe-inline'` (which allows the attack), a hash (which
+cannot work for per-page content) or a nonce (which must differ per request).
+Reading a per-request value makes the route dynamic. So a strict CSP and a
+prerendered page are mutually exclusive in the App Router, and the policy won.
+
+Verified in a browser across every storefront route: zero violations, and the
+3D viewer — dynamic imports and a canvas — works under it.
+
+### Rate limiting
+
+`SECURITY.md` section 9 has carried a table of limits since Phase 0 with nothing
+enforcing it. Now: the limits in `domain/rate-limit` (they are business rules,
+so they sit beside the deposit percentage), the counter in `lib/rate-limit`, and
+`throttle` as the one line an action calls.
+
+**Enforced on login, registration, design upload and the guest order lookup** —
+the four the checklist names. The rest of the table is defined and not yet
+wired; that is one line each and is listed as outstanding rather than implied.
+
+**The counter cannot be beaten by concurrency**, which is the only property of a
+limiter that cannot be tested without a database. The window's start is part of
+the key, so incrementing is one atomic `INSERT … ON CONFLICT DO UPDATE`; the
+integration suite fires ten simultaneous attempts at a limit of three and asserts
+exactly three allowances.
+
+**Postgres rather than Redis**, deliberately: section 9 names Postgres as the
+fallback, and the fallback is the half that can exist in this deployment today.
+
+### Worth remembering
+
+- **`RATE_LIMIT=off` exists for the test suite**, which registers dozens of
+  accounts from one address in minutes — exactly the traffic these limits
+  refuse. It follows the `EMAIL_TRANSPORT=console` precedent and announces
+  itself in the log, because a deployment with it set has no protection at all.
+- **The guest order lookup answers a 404 when limited**, not a "slow down".
+  Telling an enumerator they were rate limited tells them the endpoint is worth
+  attacking.
+- **Four high npm advisories were closed with `overrides`**, not with npm's
+  suggested `audit fix --force`, which would have downgraded Prisma 7 to 6 and
+  undone the architecture. `mysql2` and `deepmerge-ts` are transitive under the
+  Prisma CLI; neither is on a runtime path. `npm audit` now reports zero.
+- **The e2e suite needed a worker cap.** With nothing prerendered, the default
+  worker count saturated one Next process and one development Postgres, and the
+  long journeys began timing out while single requests still answered in 30 ms.
+  Four workers is parallel and deterministic; the measurement is in
+  `playwright.config.ts` so nobody has to rediscover it.
+- **One test was racing all along.** `waitForURL` resolves before the navigation
+  it belongs to has settled, and a `goto` in that window aborts it. It only
+  started losing once pages rendered per request.
+
+### Validation
+
+- 1152 unit and integration tests (26 new: the limit table and window arithmetic
+  as units, the atomicity against the database).
+- 193 end-to-end tests.
+- `npm audit`: zero vulnerabilities.
+
+### Deliberately not done
+
+- **The remaining limits are defined and not wired**: password reset (no screen
+  exists yet), custom request submission, review submission, quote
+  accept/reject, coupons, admin mutations.
+- **No Redis.** The seam is `consume`; the service is not signed up for.
+- **`style-src` keeps `'unsafe-inline'`** — closing it is a design-system change.
+- **The private bucket's policy is unverified** because storage is the
+  filesystem adapter. The box stays unticked rather than being ticked on an
+  argument.
+- **No secret scanning in CI, and no CI.**
+- **No adversarial pass over the upload pipeline.** Forged types, magic-number
+  disagreement and oversized files are covered by the existing suites; a
+  penetration test by somebody who did not write it is a different exercise.
+
+---
+
+## TASK-030: Phase 14.15 — The 3D viewer
+
+Status: DONE
+
+Related docs: `docs/ROADMAP.md` Phase 14.15, ADR-035 (the transform), ADR-036
+(what a published model may reference)
+
+### What it proves
+
+ADR-035 chose to store a placement as four percentages in texture space so that
+"the same transform positions a design over a photograph and inside a 3D
+model's UV map". For two phases that was a claim with one implementation.
+`domain/model3d/texture.ts` is the second, and the composite is done on a 2D
+canvas **precisely so it produces the same pixels** as the preview the customer
+dragged. Two renderers that disagree about where a design sits would be worse
+than having only one.
+
+### The decisions
+
+**Raw `three`, imported inside the effect.** Not `@react-three/fiber`: this is
+one imperative scene with no component tree to reconcile, and the wrapper would
+add a dependency that has to track React's version. The dynamic import is what
+keeps the largest dependency in the project out of every page that nobody
+rotates.
+
+**Photographs are the default tab.** The 3D view is the more impressive of the
+two and it is a representation; a photograph is the real garment in real light.
+It is also megabytes on a connection this shop's customers pay for by the
+megabyte, and the press of the tab is what loads `three` at all.
+
+**No tabs at all when there is no model.** Two tabs where one has nothing behind
+it teaches a visitor the site is confusing.
+
+**The camera is computed, not guessed.** The first version placed it at a fixed
+distance and cropped the garment. The model is normalised to a unit bounding
+sphere, so the distance that fits it is `1 / sin(fov / 2)` — checked against the
+horizontal field too, because a portrait garment in a landscape viewport is cut
+off at the vertical answer.
+
+### The demo model
+
+`scripts/make-demo-model.ts` writes a real binary glTF from arithmetic: a torso
+box with a collar band, two materials (`Fabric`, `Rib`), and a UV map whose
+**front face fills the 0–1 square** — which is what makes "40% across, 30% down"
+mean the same thing on the model as on the photograph.
+
+It is deterministic, committed, and asserted against this project's own parser
+in `tests/unit/model3d-texture.test.ts`. A generator that quietly starts
+producing something `inspectGlb` refuses is exactly the breakage nobody notices
+until a customer opens the viewer.
+
+Two materials rather than one, deliberately: ADR-036 says nothing can guess
+which surface of a garment you embroider, so the workshop picks and the pick is
+verified. A one-material demo would make that machinery look like ceremony.
+
+### Worth remembering
+
+- **A WebGL context is a scarce resource** — browsers cap them at around
+  sixteen. The renderer is created and disposed in one effect, and every path
+  out of the load reaches the teardown, because an unmount during the load
+  would otherwise leave one behind.
+- **Geometries, materials and textures are GPU allocations** and are not
+  collected with the objects that referenced them. The teardown traverses and
+  disposes.
+- **The material's colour multiplies its map.** Painting the design onto white
+  and leaving the colour would tint the artwork; the garment's colour is drawn
+  into the canvas underneath instead and the material is set to white.
+- **Headless Chromium renders WebGL through SwiftShader**, so the e2e tests are
+  a genuine render. One of them screenshots the canvas and counts distinct byte
+  values: a blank canvas and a drawn one are the same element, and the
+  difference is only in the pixels.
+
+### Validation
+
+- 1126 unit and integration tests (13 new, covering the texture arithmetic and
+  the demo model's acceptance by the parser).
+- `tests/e2e/catalogue.spec.ts` — five tests: the tab appears only where there
+  is a model, nothing `.glb` is fetched until it is pressed, the model renders,
+  it actually draws something, and it works in English.
+- `tests/e2e/catalogue-admin.spec.ts` — the workshop attaches the demo `.glb`,
+  sees both materials with the parser's suggestion marked, publishes it, finds
+  the tab on the storefront, and removes it again.
+
+### Deliberately not done
+
+- No 3D in the **builder** — the customer still places on a photograph.
+- No poster generation (`posterKey` exists; the first photograph stands in).
+- No variant-specific models.
+- No real garment models: the owner commissions those.
+
+---
+
+## TASK-029: Phase 14.14 — A bilingual catalogue
+
+Status: DONE
+
+Related docs: `docs/ROADMAP.md` Phase 14.14, `docs/BUSINESS-RULES.md` 11.12 and
+11.13, `docs/ARCHITECTURE.md` ("Where content is translated"),
+`docs/DATABASE.md`, ADR-040
+
+### The decision
+
+**An overlay, not a translations table** (ADR-040). ADR-027 had already answered
+a smaller version of this question for the homepage — a row carries its
+translations in a JSON column keyed by locale, merged with French as the
+fallback — and repeating that mechanism was worth more than introducing a second
+one. A table would be better at three things (sorting in the reader's language,
+indexed translated search, a third language) and worse at the one that happens
+daily: **partial translation**, which is the awkward case in a table and the
+natural one in an overlay.
+
+The trigger for revisiting it is written in the migration, not left to be
+rediscovered.
+
+### The rule that shapes everything else
+
+**The overlay is applied at the repository boundary**, where a row becomes a
+DTO — never in a page. A page that translated its own data is a page that can
+forget to, and the failure is a French name on an English screen, which is
+invisible to anybody testing in French. Every storefront read now takes a
+locale; the only `name` a page can reach is already the right one.
+
+Two consequences worth remembering:
+
+- **`localise` names the fields it may replace.** The overlay is a JSON column
+  an admin form writes; merging whatever it contained would be a way to set a
+  price. There is a unit test for exactly that.
+- **Blank is not a translation.** Empty and whitespace are dropped on read and
+  removed on write, so clearing a box gives the French back. "Not translated"
+  and "translated to nothing" would otherwise be the same thing, and only one of
+  them is ever meant.
+
+### Found on the way
+
+- **`Prisma.JsonNull` is not `Prisma.DbNull`.** The first writes the JSON value
+  `null`, which the new check constraint refuses — `jsonb_typeof('null')` is
+  `'null'`, not `'object'`. The constraint caught it on the first seed run,
+  which is what it was added for.
+- **`(optionnel)` was a hard-coded French literal** in `Label`, a shared
+  primitive, so the English workshop said it too. It is a server component and
+  cannot read a dictionary, so `FormField` — which can — now supplies the word.
+- **Two controls with one name.** The English panel repeats each French label;
+  until each carried its language, the form had two boxes called "Nom de la
+  catégorie" and a screen reader had no way to tell them apart. Found by an e2e
+  locator, which is the second time this phase that a test found a real
+  accessibility defect rather than a test bug.
+- **Editing in the workshop saved silently.** Creating navigated, which is its
+  own confirmation; editing wrote and left the screen unchanged, so the only way
+  to know was to reload. Now a toast and a `router.refresh()`, for products and
+  categories alike — and `savedAt` rather than `savedId` in the form state,
+  because the same id twice never re-fires an effect.
+
+### Validation
+
+- 1113 unit and integration tests (38 new: `translation.test.ts`, plus the
+  English half of `catalogue.test.ts`).
+- 187 end-to-end tests, including a `the catalogue in English` group that checks
+  the fallback on a product translated by name only, and an admin test that
+  translates a category through the form, reads it on `/en`, clears it, and
+  reads the French back.
+
+### Deliberately not done
+
+- No translations table; no translated sort; no translation of facets, option
+  names or colour names (a facet is a filter value shared with the URL).
+- No machine translation.
+- Order and quote snapshots keep the name they froze. Translating history
+  afterwards would rewrite a receipt (ADR-010).
+
+---
+
+## TASK-028: Phase 14.13 — Search, filters, categories
+
+Status: DONE
+
+Related docs: `docs/ROADMAP.md` Phase 14.13, `docs/BUSINESS-RULES.md` 11.9 to
+11.11, `docs/ARCHITECTURE.md` (rendering table), `docs/DATABASE.md`
+(`categories`), ADR-039
+
+### What was asked
+
+> "aight its done now i want to start on updating it what do u think are the
+> best upgrades"
+
+and, after a ranked shortlist:
+
+> "skip the first 2 for now and do the rest"
+
+The first two were the password-reset and verification screens, and configuring
+a mail provider. This is the third item: search, filter, sort and pagination on
+`/shop`, plus category pages and category management in the admin.
+
+### The three decisions
+
+**Every narrowing is a URL** (ADR-039). A filter panel with React state is the
+obvious implementation and the wrong one here: `/shop` is a page a customer
+sends to somebody over WhatsApp, which is how this business is actually
+conducted, and state that cannot be pasted into a message loses the
+conversation. So the search box, the order and the two switches are one `GET`
+form with one button, the categories are links, and the catalogue works with
+JavaScript off.
+
+**A category is a page, not a query parameter.** `/shop/c/polos` has its own
+heading, description, canonical and sitemap entry. The `c` segment exists
+because two dynamic segments cannot share `/shop/*`, and putting it on the
+category keeps the *product* at the shorter address — the one customers are
+given.
+
+**One listing is indexed.** `/shop` and each category are indexable; every
+search, order and page of them is `noindex, follow` and canonicalises back. That
+is the rule Phase 14 set for the gallery rather than a second one invented here.
+Including the page number in it is the arguable part, and the argument is
+written in `isDefaultCatalogueView`.
+
+### What that cost
+
+**`/shop` is no longer ISR.** It reads `searchParams`, so it renders per
+request — three indexed reads: the page, its total, and the unfiltered total.
+A page whose content depends on its address cannot be one cached copy. `/` and
+`/custom` keep `revalidate = 300`, which is why ADR-038's reasoning about the
+storefront switch is unchanged; the wording in it and in
+`(storefront)/layout.tsx` was corrected rather than left to go stale.
+
+### Worth remembering
+
+**Filtering by availability had to be SQL, and Prisma can do it.**
+`stockQuantity > reservedQuantity` is a column-to-column comparison, which
+`prisma.productVariant.fields.reservedQuantity` expresses. Doing it in
+JavaScript would have meant fetching the catalogue to show twelve of it and
+paginating over a total that disagrees with the grid.
+
+**Every checkbox in the workshop had no accessible name.** `CheckboxField` is a
+Radix `<button role="checkbox">`, and `<label for>` only labels form-associated
+elements — so the label was decorative and the control announced as "checkbox".
+Found by an e2e test that could not locate one by name. Fixed in the primitive
+with `aria-labelledby` plus Radix's own `Label`, which also restored
+click-the-label-to-toggle. It affects the product form too.
+
+**A `GET` form submits its defaults.** Choosing "Nouveautés" would produce
+`?sort=NEWEST`, a second URL for the same page. The default option submits an
+empty value instead, and `catalogueHref` omits defaults, so the canonical URL
+stays `/shop`.
+
+### Validation
+
+- 1075 unit and integration tests (39 new, across `catalogue-browse.test.ts` and
+  the browsing half of `catalogue.test.ts`).
+- `tests/e2e/catalogue.spec.ts` — 14 tests, read-only, in the main project: the
+  search survives a reload, the count agrees with the grid, the canonical points
+  back at the listing, a hand-typed query string never 500s, and the phone
+  viewport never scrolls sideways.
+- `tests/e2e/catalogue-admin.spec.ts` — 7 tests in a **new serialised project**
+  (`catalogue-admin`, chained after `settings-admin`), because every category is
+  a chip on every other spec's catalogue.
+
+### Deliberately not done
+
+- **No accent folding.** "brode" does not find "brodé"; doing it properly is the
+  `unaccent` extension and an expression index. Recorded in `catalogueWhere`.
+- **No relevance ranking, no price or colour facets, no category nesting.**
+- **No cached listing queries.** An optimisation with no measurement behind it.
 
 ---
 

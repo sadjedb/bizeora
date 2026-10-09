@@ -6,7 +6,7 @@ import { Breadcrumbs } from '@/components/ui/navigation';
 import { Heading, Overline, Text } from '@/components/ui/typography';
 import { Container, Grid, Section, Stack } from '@/components/layout/layout';
 import { ProductCard } from '@/components/commerce/product-card';
-import { ProductImage } from '@/components/media/product-image';
+import { ProductMedia } from './product-media';
 import {
   findProductRedirect,
   getProductPageData,
@@ -56,7 +56,7 @@ export const revalidate = 300;
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, locale: rawLocale } = await params;
   const { locale, t } = dictionaryFor(rawLocale);
-  const data = await getProductPageData(slug);
+  const data = await getProductPageData(slug, locale);
 
   // A slug that resolves to nothing describes nothing. No canonical, no Open
   // Graph, `noindex` — a 404 must never advertise itself as the canonical
@@ -81,7 +81,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ProductPage({ params }: PageProps) {
   const { slug, locale: rawLocale } = await params;
   const { locale, t } = dictionaryFor(rawLocale);
-  const data = await getProductPageData(slug);
+  const data = await getProductPageData(slug, locale);
 
   if (!data) {
     // 11.6: a slug change leaves a redirect behind, so the old URL keeps the
@@ -152,32 +152,24 @@ export default async function ProductPage({ params }: PageProps) {
           <div className="grid gap-10 lg:grid-cols-12 lg:items-start lg:gap-16">
             {/* Gallery — 7 of 12 on desktop (DESIGN-SYSTEM.md section 6). */}
             <div className="lg:col-span-7">
-              <Stack gap={4}>
-                <ProductImage
-                  src={product.images[0]?.src ?? null}
-                  alt={product.images[0]?.alt ?? product.name}
-                  ratio="product"
-                  priority
-                  sizes="(min-width: 1024px) 55vw, 100vw"
-                  {...(product.images[0]?.blurDataUrl
-                    ? { blurDataURL: product.images[0].blurDataUrl }
-                    : {})}
-                />
-
-                {product.images.length > 1 && (
-                  <div className="grid grid-cols-4 gap-3">
-                    {product.images.slice(1).map((image) => (
-                      <ProductImage
-                        key={image.alt}
-                        src={image.src}
-                        alt={image.alt}
-                        ratio="square"
-                        sizes="14vw"
-                      />
-                    ))}
-                  </div>
-                )}
-              </Stack>
+              <ProductMedia
+                images={product.images}
+                productName={product.name}
+                /*
+                 * Only when the file is actually reachable. A model row whose
+                 * storage key resolves to nothing — the bucket is unset, say —
+                 * would otherwise offer a tab that shows a failure message.
+                 */
+                model={
+                  data.model?.src
+                    ? {
+                        src: data.model.src,
+                        materialName: data.model.materialName,
+                        poster: data.model.poster,
+                      }
+                    : null
+                }
+              />
             </div>
 
             {/*

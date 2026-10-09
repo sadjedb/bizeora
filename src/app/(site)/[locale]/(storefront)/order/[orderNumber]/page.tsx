@@ -12,6 +12,7 @@ import { Price } from '@/components/commerce/price';
 import { ProductImage } from '@/components/media/product-image';
 import { findOrderForViewer } from '@/server/repositories/order-repository';
 import { getCurrentActor } from '@/lib/auth';
+import { throttle } from '@/server/security/throttle';
 import { isActive } from '@/domain/auth/actor';
 import { dictionaryFor, type Dictionary } from '@/i18n';
 
@@ -67,11 +68,34 @@ export default async function OrderConfirmationPage({
   const { token } = await searchParams;
 
   const actor = await getCurrentActor();
+  const signedIn = isActive(actor);
+
+  /*
+   * Rate limited, but only for a guest.
+   *
+   * `SECURITY.md` section 9 gives this the tightest limit in the application —
+   * five an hour per address — and gives the reason: it is the one endpoint
+   * that maps an order number to a customer's data, and it is unauthenticated
+   * by design. Somebody checking their own delivery looks it up once or twice;
+   * anything enumerating order numbers does it thousands of times.
+   *
+   * A signed-in customer is exempt: they are already limited by owning the
+   * order, and counting their visits would throttle somebody refreshing their
+   * own account page.
+   */
+  if (!signedIn) {
+    const allowed = await throttle({ action: 'guestOrderLookup' });
+
+    // A 404, not a "slow down". Telling an enumerator that they were rate
+    // limited tells them the endpoint is worth attacking; telling them the
+    // order does not exist tells them nothing they did not already have.
+    if (!allowed.ok) notFound();
+  }
 
   const order = await findOrderForViewer({
     orderNumber,
     guestToken: token ?? null,
-    userId: isActive(actor) ? actor.userId : null,
+    userId: signedIn ? actor.userId : null,
   });
 
   if (!order) notFound();

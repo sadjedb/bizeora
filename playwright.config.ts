@@ -68,6 +68,18 @@ function withoutMailProvider(): Record<string, string> {
    */
   inherited.EMAIL_TRANSPORT = 'console';
 
+  /*
+   * And no rate limiting.
+   *
+   * The suite registers dozens of accounts, signs in dozens of times and
+   * uploads repeatedly, all from 127.0.0.1 inside a few minutes — which is
+   * precisely the traffic `SECURITY.md` section 9 exists to refuse. Loosening
+   * the limits to let the tests through would mean shipping limits chosen by a
+   * test runner; turning the limiter off here keeps the real numbers real. The
+   * limiter itself is covered directly by `tests/integration/rate-limit`.
+   */
+  inherited.RATE_LIMIT = 'off';
+
   return inherited;
 }
 
@@ -76,7 +88,17 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  /*
+   * Four, not "half the cores".
+   *
+   * Every storefront page renders per request since Phase 15 — the nonce in
+   * the Content-Security-Policy is request data, so nothing is prerendered
+   * (ADR-041). One Next process and one development Postgres serve the whole
+   * suite, and at the default worker count the long journeys started timing out
+   * while single requests still answered in 30 ms: contention, not a
+   * regression. Four keeps the suite parallel and keeps it deterministic.
+   */
+  workers: process.env.CI ? 1 : 4,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
 
   use: {
@@ -100,7 +122,8 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: /design-system|content-admin|archive-admin|settings-admin/,
+      testIgnore:
+        /design-system|content-admin|archive-admin|settings-admin|catalogue-admin/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
@@ -158,6 +181,21 @@ export default defineConfig({
        * found. Chaining them makes the three admin projects a queue.
        */
       dependencies: ['content-admin'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      /*
+       * Category management, alone, and last in the admin queue.
+       *
+       * It creates categories, renames them and hides one. Every category is a
+       * chip on `/shop` and a page under `/shop/c/`, so a spec reading the
+       * catalogue while this one is running sees a shelf appear and vanish
+       * mid-assertion. It cleans up after itself; "cleans up afterwards" is no
+       * comfort to a test that read the row in between.
+       */
+      name: 'catalogue-admin',
+      testMatch: /catalogue-admin/,
+      dependencies: ['settings-admin'],
       use: { ...devices['Desktop Chrome'] },
     },
     {

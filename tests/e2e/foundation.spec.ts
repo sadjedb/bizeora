@@ -35,7 +35,11 @@ test('design tokens are applied', async ({ page }) => {
   expect(tokens.accent).not.toBe('');
   expect(tokens.fg).not.toBe('');
   expect(tokens.radiusMd).toBe('3px');
-  expect(tokens.background).toBe('rgb(250, 249, 246)');
+  // Ivory, since Phase 16 re-dyed the ramp (ADR-042). Asserted as a literal
+  // rather than read from the stylesheet on purpose: the point of this test is
+  // that the token file reaches the page, so a value that moved should fail
+  // here and be updated deliberately.
+  expect(tokens.background).toBe('rgb(250, 248, 243)');
 });
 
 test('the three font roles are loaded', async ({ page }) => {

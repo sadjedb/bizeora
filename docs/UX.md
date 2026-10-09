@@ -285,6 +285,27 @@ shows: a step indicator, the running estimate, Back, and a single primary action
   limitation of the preview, never as a problem with their file, because SVG is the **best** format
   to send. See ADR-011.
 
+#### The embroidery preview — Phase 16, ADR-043
+
+Once a drawable file is attached, this step shows it **as it will be stitched**: the palette
+reduced the way a thread box reduces it, satin rows running across the shapes, and the sheen that
+is most of what distinguishes embroidery from printing at a glance. A two-button group switches
+between **Stitched** and **Original file**.
+
+Three rules about it:
+
+- **It is a rendering, not a change to the file.** The sentence under the panel says so, in those
+  words, because a customer who believes we have altered their logo will upload it again or write
+  to ask why it looks wrong. The stored file is byte-for-byte what they sent (ADR-024).
+- **The choice follows them into step 4.** The same artwork appears on the garment in the
+  placement editor in whichever of the two views they picked. Two previews that disagree are two
+  answers to one question.
+- **The workshop never sees it.** The admin digitises the real artwork.
+
+It replaces guidance with evidence. The line about photographs and gradients stays — it is still
+true and it is read first — but a customer looking at their own gradient logo in six bands of
+colour has understood it in a way no sentence achieves.
+
 ### Step 4 — Customise
 
 Grouped, progressively disclosed, product-dependent:

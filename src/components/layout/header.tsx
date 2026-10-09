@@ -5,12 +5,11 @@ import { useState, type ReactNode } from 'react';
 
 import { brand } from '@/config/brand';
 import { cn } from '@/components/ui/cn';
-import { IconButton } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Link } from '@/components/ui/link';
 import { Sheet } from '@/components/ui/overlay';
 import { ThemeToggle } from '@/components/ui/theme';
 import { LocaleSwitcher } from '@/components/ui/locale-switcher';
-import { Container } from '@/components/layout/layout';
 import { pathWithoutLocale } from '@/i18n/routing';
 
 /**
@@ -23,6 +22,26 @@ import { pathWithoutLocale } from '@/i18n/routing';
  *
  * The wordmark comes from `config/brand.ts`. The brand name never appears as a
  * literal in a component (section 2).
+ *
+ * ## Phase 16: it is a pill that floats
+ *
+ * It was a full-width bar with a bottom border — the shape every storefront
+ * has. It is now a rounded bar inset from the edges of the window, with the
+ * page scrolling visibly past it on all four sides.
+ *
+ * Two things about that are worth knowing before changing it:
+ *
+ * **It is still `sticky`, not `fixed`.** A sticky element keeps its space in
+ * the flow, so the first section of every page starts below the header exactly
+ * as it always did and no page needs a compensating top padding. Going
+ * `fixed` to win the few pixels of gutter would push that compensation onto
+ * every page in the site, and the one that forgot would hide its own heading.
+ *
+ * **The translucency is doing real work.** `bg-surface/80` plus a backdrop blur
+ * is what makes a bar sitting *on top of* a photograph legible without a solid
+ * block of colour cutting the image in half. On a ground with no backdrop-blur
+ * support it falls back to 80% opaque, which is still legible — so the blur is
+ * an enhancement, not a dependency.
  */
 
 export type NavItem = { label: string; href: string; accent?: boolean };
@@ -66,7 +85,16 @@ const DEFAULT_LABELS: HeaderLabels = {
 
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cn('font-display text-heading-lg tracking-tight', className)}>
+    <span
+      className={cn(
+        'font-display text-heading-lg tracking-tight',
+        // The mark gets the softened terminals too. It is the same letterform
+        // decision as `Accent`, applied to the one word that is always on
+        // screen — see `components/ui/typography.tsx`.
+        "[font-variation-settings:'SOFT'_60]",
+        className,
+      )}
+    >
       {brand.name}
     </span>
   );
@@ -87,6 +115,14 @@ export type HeaderProps = {
    */
   cartHref?: string | null;
   accountHref?: string | null;
+  /**
+   * The one filled call to action in the bar, from `lg` upwards.
+   *
+   * `null` omits it. It is the only coloured thing in the header, which is what
+   * lets it be read at a glance against a row of outline icons — give it to the
+   * action the business actually wants, and never to two of them.
+   */
+  cta?: { label: string; href: string } | null;
   /** `null` omits search; omitting the prop keeps the default trigger. */
   searchSlot?: ReactNode | null;
   labels?: HeaderLabels;
@@ -105,6 +141,7 @@ export function Header({
   cartCount = 0,
   cartHref = null,
   accountHref = null,
+  cta = null,
   searchSlot,
   labels = DEFAULT_LABELS,
   sticky = true,
@@ -123,85 +160,122 @@ export function Header({
   return (
     <header
       className={cn(
-        'bg-bg/95 border-border z-40 border-b backdrop-blur',
+        'z-40 px-3 pt-3 md:px-6 md:pt-5',
         sticky && 'sticky top-0',
         className,
       )}
     >
-      <Container>
-        <div className="flex h-16 items-center justify-between gap-4 md:h-20">
-          <div className="flex items-center gap-2">
-            <IconButton
-              label={labels.openMenu}
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setMobileOpen(true)}
-            >
-              <MenuIcon className="size-5" aria-hidden="true" />
-            </IconButton>
+      <div
+        className={cn(
+          'mx-auto flex max-w-(--container-page) items-center gap-3',
+          'rounded-full border border-hairline bg-surface/80 shadow-md backdrop-blur-md',
+          'h-14 pr-2 pl-4 md:h-16 md:pr-3 md:pl-6',
+        )}
+      >
+        <div className="flex items-center gap-1">
+          <IconButton
+            label={labels.openMenu}
+            variant="ghost"
+            shape="pill"
+            size="sm"
+            className="-ml-2 md:hidden"
+            onClick={() => setMobileOpen(true)}
+          >
+            <MenuIcon className="size-5" aria-hidden="true" />
+          </IconButton>
 
-            <Link href="/" variant="plain" aria-label={brand.name}>
-              <Wordmark />
-            </Link>
-          </div>
+          <Link href="/" variant="plain" aria-label={brand.name}>
+            <Wordmark />
+          </Link>
+        </div>
 
-          <nav aria-label={labels.mainNavigation} className="hidden md:block">
-            <ul className="flex items-center gap-6">
-              {items.map((item) => (
-                <li key={item.href}>
-                  <NavLink item={item} current={current === item.href} />
-                </li>
-              ))}
-            </ul>
-          </nav>
+        {/*
+         * The links sit in the middle of the bar, not beside the mark.
+         *
+         * `flex-1` plus `justify-center` rather than absolute centring, because
+         * absolute centring makes the nav overlap the mark the moment somebody
+         * adds a sixth link — this way it runs out of room and wraps the
+         * problem into view instead of hiding it under the logo.
+         */}
+        <nav
+          aria-label={labels.mainNavigation}
+          className="hidden flex-1 justify-center md:flex"
+        >
+          <ul className="flex items-center gap-7">
+            {items.map((item) => (
+              <li key={item.href}>
+                <NavLink item={item} current={current === item.href} />
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-          <div className="flex items-center gap-1">
-            <LocaleSwitcher label={labels.language} />
-            <ThemeToggle />
+        <div className="ml-auto flex items-center gap-0.5 md:ml-0">
+          <div className="hidden items-center gap-0.5 md:flex">
+            <LocaleSwitcher label={labels.language} className="rounded-full" />
+            <ThemeToggle className="rounded-full" />
 
             {searchSlot === undefined ? (
-              <IconButton label={labels.search} variant="ghost" size="sm">
+              <IconButton label={labels.search} variant="ghost" shape="pill" size="sm">
                 <Search className="size-5" aria-hidden="true" />
               </IconButton>
             ) : (
               searchSlot
             )}
-
-            {accountHref && (
-              <Link href={accountHref} variant="plain" aria-label={labels.account}>
-                <span className="text-fg-muted hover:text-fg hover:bg-hover flex size-10 items-center justify-center rounded-md transition-colors">
-                  <User className="size-5" aria-hidden="true" />
-                </span>
-              </Link>
-            )}
-
-            {cartHref && (
-              <Link
-                href={cartHref}
-                variant="plain"
-                aria-label={cartCount > 0 ? `${labels.cart} (${cartCount})` : labels.cart}
-              >
-                <span className="text-fg-muted hover:text-fg hover:bg-hover relative flex size-10 items-center justify-center rounded-md transition-colors">
-                  <ShoppingBag className="size-5" aria-hidden="true" />
-                  {cartCount > 0 && (
-                    <span
-                      className={cn(
-                        'bg-accent text-fg-on-accent absolute top-1 right-1',
-                        'text-mono-sm flex min-w-4 items-center justify-center',
-                        'rounded-full px-1 tabular-nums',
-                      )}
-                      aria-hidden="true"
-                    >
-                      {cartCount}
-                    </span>
-                  )}
-                </span>
-              </Link>
-            )}
           </div>
+
+          {accountHref && (
+            <Link
+              href={accountHref}
+              variant="plain"
+              aria-label={labels.account}
+              className="hidden md:block"
+            >
+              <span className="text-fg-muted hover:text-fg hover:bg-hover flex size-10 items-center justify-center rounded-full transition-colors">
+                <User className="size-5" aria-hidden="true" />
+              </span>
+            </Link>
+          )}
+
+          {cartHref && (
+            <Link
+              href={cartHref}
+              variant="plain"
+              aria-label={cartCount > 0 ? `${labels.cart} (${cartCount})` : labels.cart}
+            >
+              <span className="text-fg-muted hover:text-fg hover:bg-hover relative flex size-10 items-center justify-center rounded-full transition-colors">
+                <ShoppingBag className="size-5" aria-hidden="true" />
+                {cartCount > 0 && (
+                  <span
+                    className={cn(
+                      'bg-accent text-fg-on-accent absolute top-1 right-1',
+                      'text-mono-sm flex min-w-4 items-center justify-center',
+                      'rounded-full px-1 tabular-nums',
+                    )}
+                    aria-hidden="true"
+                  >
+                    {cartCount}
+                  </span>
+                )}
+              </span>
+            </Link>
+          )}
+
+          {cta && (
+            <Button
+              asChild
+              variant="accent"
+              shape="pill"
+              size="md"
+              className="ml-1.5 hidden lg:inline-flex"
+            >
+              <Link href={cta.href} variant="plain">
+                {cta.label}
+              </Link>
+            </Button>
+          )}
         </div>
-      </Container>
+      </div>
 
       <Sheet
         side="left"
@@ -219,8 +293,11 @@ export function Header({
                   aria-current={current === item.href ? 'page' : undefined}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'text-body flex min-h-11 items-center rounded-sm px-2',
-                    item.accent ? 'text-accent font-medium' : 'text-fg',
+                    // The sheet is where a phone reads the navigation, so it is
+                    // set at display size rather than at body size — it is the
+                    // page's primary content while it is open, not a list.
+                    'font-display text-display-md flex min-h-12 items-center rounded-sm px-2',
+                    item.accent ? 'text-accent' : 'text-fg',
                   )}
                 >
                   {item.label}
@@ -229,6 +306,44 @@ export function Header({
             ))}
           </ul>
         </nav>
+
+        {/*
+         * Language and theme live down here on a phone rather than in the bar.
+         * They are settings somebody changes once; the bar is for the four
+         * things they came to do, and a pill with eight controls in it is a
+         * toolbar.
+         */}
+        <div className="border-hairline mt-8 flex items-center gap-1 border-t pt-4">
+          <LocaleSwitcher label={labels.language} className="rounded-full" />
+          <ThemeToggle className="rounded-full" />
+          {accountHref && (
+            <Link
+              href={accountHref}
+              variant="plain"
+              aria-label={labels.account}
+              onClick={() => setMobileOpen(false)}
+            >
+              <span className="text-fg-muted hover:text-fg hover:bg-hover flex size-10 items-center justify-center rounded-full transition-colors">
+                <User className="size-5" aria-hidden="true" />
+              </span>
+            </Link>
+          )}
+        </div>
+
+        {cta && (
+          <Button
+            asChild
+            variant="accent"
+            shape="pill"
+            size="lg"
+            fullWidth
+            className="mt-4"
+          >
+            <Link href={cta.href} variant="plain" onClick={() => setMobileOpen(false)}>
+              {cta.label}
+            </Link>
+          </Button>
+        )}
       </Sheet>
     </header>
   );

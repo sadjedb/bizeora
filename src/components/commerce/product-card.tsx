@@ -83,7 +83,7 @@ export function ProductCard({
   const extraColours = colours.length - visibleColours.length;
 
   return (
-    <article className={cn('group relative flex flex-col gap-3', className)}>
+    <article className={cn('group relative flex flex-col gap-4', className)}>
       <div className="relative">
         <ProductImage
           src={imageSrc}
@@ -91,19 +91,30 @@ export function ProductCard({
           ratio="product"
           priority={priority}
           zoomOnHover
+          className="rounded-2xl"
           {...(sizes ? { sizes } : {})}
           {...(blurDataURL ? { blurDataURL } : {})}
         />
 
         {badge && (
           <div className="absolute top-3 left-3">
-            <Badge variant={badge.variant ?? 'solid'}>{badge.label}</Badge>
+            {/* Pill-shaped on a 28px frame: a 1px-radius chip pinned to the
+             * corner of a generously rounded photograph reads as a sticker
+             * somebody forgot to peel off (ADR-042). */}
+            <Badge
+              variant={badge.variant ?? 'solid'}
+              className="rounded-full px-2.5 py-1"
+            >
+              {badge.label}
+            </Badge>
           </div>
         )}
 
         {!available && (
           <div className="absolute right-3 bottom-3">
-            <Badge variant="muted">{soldOutLabel ?? t.product.soldOut}</Badge>
+            <Badge variant="muted" className="rounded-full px-2.5 py-1">
+              {soldOutLabel ?? t.product.soldOut}
+            </Badge>
           </div>
         )}
       </div>
@@ -114,7 +125,7 @@ export function ProductCard({
         {/* The link wraps the name and stretches over the card, so the whole
          * tile is clickable while the accessible name stays the product name
          * rather than "image, link, link". */}
-        <Text variant="heading-md" as="h3" clamp={2}>
+        <Text variant="heading-lg" as="h3" clamp={2}>
           <Link href={href} variant="plain" className="after:absolute after:inset-0">
             {name}
           </Link>
@@ -155,7 +166,7 @@ export function ProductCard({
 export function ProductCardSkeleton({ className }: { className?: string }) {
   return (
     <div className={cn('flex flex-col gap-3', className)} aria-hidden="true">
-      <div className="bg-surface-sunken animate-shimmer aspect-4/5 w-full rounded-lg motion-reduce:animate-none" />
+      <div className="bg-surface-sunken animate-shimmer aspect-4/5 w-full rounded-2xl motion-reduce:animate-none" />
       <div className="flex flex-col gap-2">
         <div className="bg-surface-sunken animate-shimmer h-3 w-16 rounded-sm motion-reduce:animate-none" />
         <div className="bg-surface-sunken animate-shimmer h-4 w-3/4 rounded-sm motion-reduce:animate-none" />

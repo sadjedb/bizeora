@@ -4,7 +4,12 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { Footer, type FooterColumn, type FooterProps } from '@/components/layout/footer';
-import { Header, type HeaderLabels, type NavItem } from '@/components/layout/header';
+import {
+  Header,
+  type HeaderLabels,
+  type HeaderProps,
+  type NavItem,
+} from '@/components/layout/header';
 
 /**
  * The storefront shell: header, main, footer.
@@ -25,6 +30,7 @@ export function StorefrontChrome({
   contact,
   labels,
   footerMadeIn,
+  cta,
   children,
 }: {
   nav: readonly NavItem[];
@@ -32,6 +38,7 @@ export function StorefrontChrome({
   contact: FooterProps['contact'];
   labels: HeaderLabels;
   footerMadeIn: string;
+  cta: HeaderProps['cta'];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -45,6 +52,7 @@ export function StorefrontChrome({
         searchSlot={null}
         cartHref="/cart"
         accountHref="/account"
+        cta={cta}
       />
 
       <main id="main" className="flex-1">

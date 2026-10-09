@@ -208,6 +208,95 @@ export function hasErrors(errors: Record<string, string | undefined>): boolean {
 }
 
 /* ---------------------------------------------------------------------------
+ * Category drafts
+ * ------------------------------------------------------------------------ */
+
+export const CATEGORY_NAME_MAX = 60;
+export const CATEGORY_DESCRIPTION_MAX = 600;
+export const CATEGORY_POSITION_MAX = 999;
+
+export type CategoryDraft = {
+  name: string;
+  slug: string;
+  description: string | null;
+  /** Where it sits in the chip row. Lower is earlier. */
+  position: number;
+  /** Off takes it out of the storefront without touching the products in it. */
+  isActive: boolean;
+  seoTitle: string | null;
+  seoDescription: string | null;
+};
+
+export type CategoryDraftField = keyof CategoryDraft | 'form';
+
+/**
+ * Whether a category may be saved.
+ *
+ * The same division as `validateProductDraft`: this answers what the payload
+ * alone can answer, and the database answers uniqueness and referential
+ * questions with constraints rather than with a read-then-write two people can
+ * both pass.
+ *
+ * The description is optional and short on purpose. It is the standfirst under
+ * the heading on `/shop/c/<slug>` and the fallback meta description, and a
+ * paragraph that runs past a couple of lines stops being either.
+ */
+export function validateCategoryDraft(
+  draft: CategoryDraft,
+): FieldErrors<CategoryDraftField> {
+  const errors: FieldErrors<CategoryDraftField> = {};
+
+  const name = draft.name.trim();
+  if (name.length === 0) errors.name = 'Le nom est obligatoire.';
+  else if (name.length > CATEGORY_NAME_MAX) {
+    errors.name = `${CATEGORY_NAME_MAX} caractères au maximum.`;
+  }
+
+  if (!isValidSlug(draft.slug)) {
+    errors.slug = 'Minuscules, chiffres et tirets uniquement, par exemple « tote-bags ».';
+  }
+
+  if (draft.description !== null && draft.description.length > CATEGORY_DESCRIPTION_MAX) {
+    errors.description = `${CATEGORY_DESCRIPTION_MAX} caractères au maximum.`;
+  }
+
+  if (!Number.isInteger(draft.position) || draft.position < 0) {
+    errors.position = 'Un nombre entier, à partir de zéro.';
+  } else if (draft.position > CATEGORY_POSITION_MAX) {
+    errors.position = `${CATEGORY_POSITION_MAX} au maximum.`;
+  }
+
+  if (draft.seoTitle !== null && draft.seoTitle.length > NAME_MAX) {
+    errors.seoTitle = `${NAME_MAX} caractères au maximum.`;
+  }
+  if (draft.seoDescription !== null && draft.seoDescription.length > SUBTITLE_MAX * 2) {
+    errors.seoDescription = `${SUBTITLE_MAX * 2} caractères au maximum.`;
+  }
+
+  return errors;
+}
+
+/**
+ * Whether a category may be switched off.
+ *
+ * **A category holding live products may not**, and that is the whole rule. The
+ * products would keep their pages and keep selling, while the chip that leads
+ * to them disappeared and `/shop/c/<slug>` started returning 404 — a shop that
+ * quietly hides a shelf it is still stocking. Emptying it first is one filter
+ * away in the products list, and it is a decision somebody should make on
+ * purpose.
+ *
+ * Draft and archived products do not count: they are not on the storefront, so
+ * nothing they own goes missing.
+ */
+export function mayDeactivateCategory(input: { liveProducts: number }): boolean {
+  return input.liveProducts === 0;
+}
+
+export const CATEGORY_IN_USE_REFUSAL =
+  'Cette catégorie contient des produits en ligne. Dépubliez-les ou déplacez-les avant de la désactiver.';
+
+/* ---------------------------------------------------------------------------
  * Variants
  * ------------------------------------------------------------------------ */
 

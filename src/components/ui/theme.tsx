@@ -48,10 +48,16 @@ const CHOICES: readonly { value: ThemeChoice; icon: typeof Sun }[] = [
  * blocking site data — it does nothing at all and the page falls back to the
  * system preference, which is a correct outcome rather than a broken one.
  */
-export function ThemeScript() {
+export function ThemeScript({ nonce }: { nonce?: string }) {
   const script = `try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t}}catch(e){}`;
 
-  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+  /*
+   * The nonce is a prop rather than something this reads for itself: this
+   * module is a client component, and `headers()` is server-only. The root
+   * layout reads it and hands it down — which is also the only place in the
+   * application that renders this.
+   */
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
 }
 
 /**

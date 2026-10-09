@@ -2,7 +2,10 @@ import type { MetadataRoute } from 'next';
 
 import { absoluteUrl, languageAlternates, seoIndexable } from '@/lib/seo';
 import { LOCALES } from '@/i18n/locales';
-import { listProductsForSitemap } from '@/server/repositories/catalogue-repository';
+import {
+  listCatalogueCategories,
+  listProductsForSitemap,
+} from '@/server/repositories/catalogue-repository';
 import { listGalleryItemsForSitemap } from '@/server/repositories/gallery-repository';
 
 /**
@@ -56,8 +59,9 @@ const STATIC_ROUTES: readonly {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!seoIndexable) return [];
 
-  const [products, gallery] = await Promise.all([
+  const [products, categories, gallery] = await Promise.all([
     listProductsForSitemap(),
+    listCatalogueCategories(),
     listGalleryItemsForSitemap(),
   ]);
 
@@ -81,6 +85,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: product.updatedAt,
       changeFrequency: 'weekly' as const,
       priority: 0.8,
+    })),
+
+    /*
+     * Category listings, but not filtered views of them.
+     *
+     * A category is a page — its own set of products, its own heading, its own
+     * canonical — which is exactly what separates it from `/shop?q=tote`. The
+     * repository already excludes the empty ones, so the map never advertises a
+     * listing with nothing on it.
+     *
+     * No `lastModified` of their own: a category row barely changes while the
+     * products inside it change weekly, so the honest answer is now.
+     */
+    ...categories.map((category) => ({
+      path: `/shop/c/${category.slug}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
     })),
 
     ...gallery.map((item) => ({

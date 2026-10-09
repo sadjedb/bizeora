@@ -2723,9 +2723,12 @@ Accepted — Phase 14.12. Amends rule 9C in `CLAUDE.md`.
 taking orders while the workshop carries on. Three things made it harder than a
 boolean.
 
-**The storefront is cached.** The front page, the catalogue and the builder are
-prerendered and revalidated every five minutes (`revalidate = 300`), which is
-most of what makes the shop fast. A switch that only changes a database row
+**The storefront is cached.** The front page, the catalogue and the builder were
+all prerendered and revalidated every five minutes (`revalidate = 300`), which is
+most of what makes the shop fast. (Phase 14.13 has since made the catalogue
+dynamic — it reads `searchParams` — which changes none of the reasoning below;
+the front page and the builder are still cached, and were the pages that
+returned 500.) A switch that only changes a database row
 changes nothing a visitor sees for up to five minutes, and "one more customer got
 in" is not an acceptable rounding error on a switch whose whole purpose is to
 stop them.
@@ -2794,3 +2797,481 @@ back in.
 - Negative: an owner cannot preview their own closed shop. The field's help text
   says so.
 - Negative: one more route group, and a shell shared by two layouts.
+
+---
+
+# ADR-039: A narrowed catalogue is a URL, and only one of them is indexed
+
+## Status
+
+Accepted — Phase 14.13.
+
+## Context
+
+`/shop` was one grid of everything, with no search, no order and no pages. That
+is fine at eight products and unusable at forty, and the owner is about to add
+forty. `UX.md` section 2 has always listed the catalogue as "search, filter,
+sort, paginate" and section 4 asks for category chips, a default order and a
+visible filter count; none of it existed, because a filter that filters nothing
+is worse than no filter at all.
+
+Three questions had to be answered before any of it could be built.
+
+**Where does the state live?** A filter panel with React state is the obvious
+implementation and the wrong one for this shop. `/shop` is a page a customer
+sends to somebody — "here, these are the ones I meant" — over WhatsApp, which is
+how this business is actually conducted. State that cannot be pasted into a
+message is state that loses the conversation.
+
+**What is a category?** The schema has had `categories` since Phase 2 and every
+product points at one, but a category could be a filter (`/shop?category=polos`)
+or a page (`/shop/c/polos`). Both work; they differ in what a crawler and a
+customer can hold on to.
+
+**What gets indexed?** Search, order, page and two switches multiply into
+hundreds of addresses for eight products. Left alone, that is a crawler
+indexing `?sort=PRICE_DESC&page=3` and a customer landing on it.
+
+## Decision
+
+- **Every narrowing is in the URL**, parsed by `domain/catalogue/browse` and
+  never held in component state. The search box, the order and the switches are
+  one `GET` form with one submit button; the categories are links. Nothing on
+  the catalogue needs JavaScript to work.
+- **A category is a page**, at `/shop/c/<slug>`, with its own heading, its own
+  description, its own canonical and its own sitemap entry. The `c` segment
+  exists because two dynamic segments cannot share `/shop/*` — Next could not
+  tell `/shop/polos` the product from `/shop/polos` the category — and putting
+  it on the category keeps the *product* at the shorter address, which is the
+  one customers are given.
+- **One listing is indexed.** `/shop` and each `/shop/c/<slug>` are indexable;
+  every view of them — a search, an order, a page — is `noindex, follow` and
+  canonicalises to the listing it narrows. `follow` matters: a crawler is
+  welcome to walk page three to reach the products on it.
+- **The page number counts as a view.** Arguable, and argued in
+  `isDefaultCatalogueView`: the modern general advice is a self-canonical on
+  page 2, and it is right for a catalogue of two thousand. This one holds eight,
+  every product on page 2 is one hop from page 1, and one indexable catalogue is
+  worth more than four near-identical ones.
+- **Filtering happens in PostgreSQL, including availability.** "In stock" is
+  derived from a policy and two counts and could be computed in JavaScript;
+  doing so would mean fetching the catalogue to show twelve of it and paginating
+  over a total that disagrees with what the visitor can see. The comparison is a
+  column reference (`prisma.productVariant.fields.reservedQuantity`), so it runs
+  row by row in the database.
+- **`/shop` is therefore no longer ISR.** A page whose content depends on its
+  address cannot be one cached copy. It costs three indexed reads per request —
+  the page, its total, and the unfiltered total — and the front page and the
+  builder keep their five-minute cache.
+- **A category with live products may not be hidden.** The products would keep
+  their pages and keep selling while the shelf they sit on vanished. The rule is
+  `mayDeactivateCategory`, enforced in the service against a live count rather
+  than against a number the form remembered.
+
+## Alternatives considered
+
+- **A client-side filter panel.** Instant, and produces no address. Rejected on
+  the WhatsApp argument above; also every filtered view would be invisible to a
+  crawler.
+- **`?category=` instead of `/shop/c/`.** One less route, and a category would
+  never be indexable — which for a shop whose categories are "polos" and
+  "casquettes" throws away the search terms customers actually use.
+- **Debounced live search.** Nicer on a fast connection, and it needs
+  JavaScript, a loading state, a race-condition policy and a history strategy.
+  A form with a button needs none of them and is not meaningfully slower on the
+  connections this shop's customers have.
+- **Sorting by the resolved unit price.** Correct in a way the current sort is
+  not: a variant may override the price, so `basePrice` is an approximation.
+  Rejected because resolving it means computing a price for every row in the
+  catalogue before taking twelve. Written down in `catalogueOrderBy` rather than
+  hidden.
+- **Accent-insensitive search.** "brode" does not find "brodé", which is a real
+  limitation in French. Fixing it properly means the `unaccent` extension and an
+  expression index — a migration for a catalogue of eight products. Recorded in
+  `catalogueWhere` so the next person knows it is a known limit.
+
+## Consequences
+
+- Positive: a filtered catalogue is an address that survives being shared,
+  bookmarked and reloaded, and works with scripts off.
+- Positive: categories became manageable from the workshop in the same change,
+  because a category page with no screen behind it is a page nobody can create.
+- Negative: `/shop` costs three queries per request where it used to cost none.
+  Measured against a page that already rendered a grid of photographs, this is
+  not the expensive part.
+- Negative: applying a filter takes a button press rather than a click. The
+  categories, which are the most-used filter, are still one click.
+
+---
+
+# ADR-040: The catalogue is translated by an overlay, with French as the fallback
+
+## Status
+
+Accepted — Phase 14.14. Extends ADR-027's `config` overlay from the homepage to
+the catalogue.
+
+## Context
+
+The interface has been bilingual since Phase 14.7: two typed dictionaries, a
+language in every URL, a workshop that follows a cookie. The **catalogue** never
+was. Product names, subtitles, descriptions, category names, gallery captions
+and the banner strip are rows in tables with one column per field, so an English
+visitor read an English shell wrapped around French content — the largest
+remaining gap between what the site claims to be and what it is.
+
+ADR-027 had already answered a smaller version of this question. The homepage is
+data, and its bands carry their translations inside their own `config` column,
+keyed by locale, merged by `localiseSection` with French as the fallback. That
+mechanism's own comment said what it did not cover: *"It does not translate the
+catalogue: product names, descriptions and gallery captions are their own rows,
+and giving them a language is a schema change."*
+
+This is that schema change, and the question was whether to repeat the overlay
+or to introduce the thing a textbook would reach for — a `product_translations`
+table, keyed by `(product_id, locale)`.
+
+## Decision
+
+- **A nullable `translations` JSONB column** on `products`, `categories`,
+  `gallery_items` and `banners`, keyed by locale and then by the column it
+  overrides: `{"en": {"name": "Embroidered cap"}}`.
+- **French is the source of truth and lives in the row's own columns.** No `fr`
+  key is ever written. Every query that does not care about language — the
+  admin, the sitemap, an order snapshot — keeps working untouched.
+- **The fallback is per field, not per row.** A product with an English name and
+  no English description reads correctly: the overlay supplies what it has and
+  the rest stays French. A half-translated catalogue is the normal state of one
+  that is being translated, and it has to render properly rather than merely not
+  crash.
+- **Blank is not a translation.** An overlay field that is empty or whitespace
+  is treated as absent on read *and* removed on write, so clearing a box in the
+  form gives the French back. There is no way to say "translate this to
+  nothing", and none is wanted.
+- **The caller names the translatable fields** (`localise(row, overlay, locale,
+  ['name'])`). The overlay is a JSON column an admin form writes; merging
+  whatever it contained would make it a way to set a price.
+- **The overlay is applied at the repository boundary**, where a row becomes a
+  DTO, not in each page. A page cannot forget to translate, because the only
+  `name` it can reach is already the right one.
+- **Search follows the reader.** Browsing in English also matches the English
+  name, as a JSON path match, while still matching the French columns — a
+  half-translated catalogue must not be half-unsearchable.
+- **A check constraint** on each column: the overlay is an object or nothing.
+  The column is written by a form, and a malformed overlay would fail silently
+  by simply not translating anything.
+
+## Alternatives considered
+
+- **A `product_translations` table.** The textbook answer, and better on three
+  counts: `ORDER BY name` could sort in the reader's language, translated search
+  could use an index, and a third language would be rows rather than a wider
+  object. Rejected for now because it is four tables and four sets of repository
+  plumbing for two languages, because partial translation is the awkward case in
+  a table and the natural one in an overlay, and because the project already
+  made this call once for the homepage — two mechanisms for one problem is worse
+  than one imperfect mechanism. **The migration is mechanical when it is
+  needed**: the overlay's shape is exactly one row per locale.
+- **Translating at render time from a dictionary.** Only works for copy the
+  developers write, which is exactly what the dictionaries already do. Product
+  names belong to the business, not to the build.
+- **Machine translation on the fly.** A network call on the catalogue's hot
+  path, a cost per render, and a shop whose product descriptions are written by
+  a machine that has never seen the garment.
+- **Writing French into the overlay too**, for symmetry. Rejected: two places
+  for one value and no rule about which wins.
+
+## Consequences
+
+- Positive: an English visitor reads an English catalogue, and the owner
+  translates it from the same form they price it on — the French text is printed
+  beside each box so a translator can see what they are matching.
+- Positive: nothing that does not ask for a language changed behaviour. The
+  default is French, so every existing caller kept working.
+- Negative: sorting by name sorts by the French name in both languages.
+- Negative: translated search is a JSON path match, not an indexed column. Fine
+  over hundreds of rows; the trigger for revisiting it is written in the
+  migration.
+- Negative: a third language widens an object rather than adding rows. Also
+  written down there.
+
+---
+
+# ADR-041: A nonce-based CSP, and the caching it costs
+
+## Status
+
+Accepted — Phase 15. Amends ADR-038's account of what is cached.
+
+## Context
+
+`SECURITY.md` section 12 has specified a Content-Security-Policy since Phase 0,
+"delivered as a header, with nonces for the framework's inline scripts". What
+shipped instead was four directives in `next.config.ts` — `frame-ancestors`,
+`base-uri`, `object-src`, `form-action` — chosen because they cannot break
+anything, with a comment saying the real policy "requires middleware and is
+deliberately deferred to Phase 15". This is Phase 15.
+
+The difficulty is not writing the policy. It is that **a strict `script-src`
+and a cached page are mutually exclusive in the Next.js App Router**, and the
+reason is structural rather than incidental:
+
+- Next streams its hydration payload through **inline `<script>` elements**.
+  They are not optional and their content differs per page.
+- An inline script is allowed by a CSP in exactly three ways: `'unsafe-inline'`,
+  a hash, or a nonce. The first allows every injected script as well, which is
+  the attack the policy exists to stop. The second cannot work for content that
+  differs per render.
+- That leaves a nonce — a value that must differ per request, or it is not a
+  nonce. Reading it in a layout means reading a request header, which opts the
+  route into dynamic rendering.
+
+So the policy the security document asks for costs the prerendering of every
+page under the layout that renders the nonce — which by this point was `/` and
+`/custom`, the catalogue having become dynamic in Phase 14.13.
+
+## Decision
+
+- **A per-request nonce, minted in the middleware**, which is the only place
+  that runs before a response is built. It travels two ways: down to the browser
+  in the policy header, and back in on the request headers, where
+  `lib/security/nonce` reads it.
+- **`script-src 'self' 'nonce-…' 'strict-dynamic'`**, with no `'unsafe-inline'`.
+  `'strict-dynamic'` lets a nonced script load the chunks it needs without every
+  chunk URL being listed, which is what makes the policy survive a code-split
+  application.
+- **`style-src` keeps `'unsafe-inline'`.** Next's font loader and React's own
+  inline styles need it, there is no nonce path for `style` attributes short of
+  rewriting every one in the application, and an injected stylesheet is a
+  defacement risk rather than an execution one.
+- **`'unsafe-eval'` in development only**, because the dev server compiles
+  modules in the browser and production never does.
+- **The prerendering is given up**, deliberately. A strict CSP is a permanent
+  property of every page; ISR on two pages of a small shop is a few milliseconds
+  on a site whose catalogue already renders per request.
+- **The JSON-LD block carries the nonce too.** It is a data block and is never
+  executed, browsers differ on whether `script-src` governs it, and the failure
+  is silent — a blocked block does not break the page, it stops the shop
+  appearing as a rich result.
+- **One CSP, from one place.** The static policy was removed from
+  `next.config.ts` rather than left beside the new one: a browser intersects two
+  CSP headers, so a leftover would silently narrow the real policy.
+
+## Alternatives considered
+
+- **Hashes instead of a nonce.** Would keep the prerendering. Works for the
+  theme script, whose content is fixed, and cannot work for Next's hydration
+  payload, whose content is the page. Rejected because it solves the easy half.
+- **`'unsafe-inline'` with a nonce as well.** A browser that understands the
+  nonce ignores `'unsafe-inline'`, so this is the documented way to keep old
+  browsers working. Rejected: the browsers it helps are the ones least able to
+  defend themselves, and every browser this shop's customers use supports
+  nonces.
+- **Report-only first.** The standard careful rollout, and right for a site with
+  traffic to learn from. This one has no traffic yet, and the whole policy was
+  verified against every page in a browser before it shipped.
+- **Keeping the policy in `next.config.ts` and skipping nonces.** What was
+  already there. It leaves `script-src` unset, which means `default-src 'self'`
+  governs scripts and Next's own inline hydration is blocked — so in practice it
+  meant no `script-src` at all.
+
+## Consequences
+
+- Positive: an injected `<script>` does not execute, which is the single most
+  valuable thing a CSP does.
+- Positive: the storefront now renders per request everywhere, so the class of
+  bug where a cached page disagrees with the database — which cost three
+  debugging sessions across Phases 14.8, 14.12 and 14.13 — is gone rather than
+  narrowed.
+- Positive: ADR-038's staff-preview exception becomes possible again, because
+  nothing under the storefront layout is prerendered any more. It is **not**
+  reinstated here; that is a product decision, not a side effect.
+- Negative: every storefront page costs a render. Measured against a page that
+  already queries a database and serves photographs, this is not the expensive
+  part — but it is a real change and it is why this is an ADR.
+- Negative: `style-src 'unsafe-inline'` remains. Closing it means a design-system
+  change, and is the obvious next step if this is ever tightened further.
+
+---
+
+# ADR-042: The storefront is rounded; the workshop is not
+
+## Status
+
+Accepted — Phase 16. Amends `DESIGN-SYSTEM.md` sections 1 and 7.
+
+## Context
+
+The owner commissioned a redesign and supplied four references: a cafe site for
+the structure (`sons.visionwebdevs.tech`), an embroidery designer for the
+placement editor (`stickerei.com`), an order form for the idea of previewing
+artwork as stitching (`embroideryli.com`), and the business's own Instagram and
+TikTok — 3.5K and 21.5K followers under the words "LUXURY EMBROIDERY" — for the
+palette and the voice. The instruction, in one line, was **sons' structure,
+Bizeora's skin**.
+
+Most of that is work rather than a decision. One part is a decision, because it
+contradicts something already written down.
+
+`DESIGN-SYSTEM.md` section 7 says radii are "deliberately tight" because "large
+radii read as a consumer app", and section 1 lists "no rounded blue buttons"
+among the things the product must not read as. The reference layout is built
+almost entirely out of **large rounded photographic cards and pill-shaped
+controls**. Taken literally, the existing rule forbids the redesign.
+
+It is not, however, the same rule applied to the same thing. Two different
+surfaces are involved and they have opposite requirements:
+
+- The **storefront** sells garments. Its job is photography, and a photograph in
+  a generously rounded frame reads as a printed card laid on the page; the same
+  photograph at 6px reads as a `<div>` with a picture in it. This is the single
+  borrowed gesture the whole new layout rests on.
+- The **workshop** is an instrument somebody uses for six hours a day. A dense
+  table of orders with soft corners on every control reads as a toy, and section
+  12's "same brand at working speed" is the reason it exists at all.
+
+## Decision
+
+**Radius splits by surface, and the split is expressed in the token file rather
+than in components.**
+
+- Controls keep the existing tight ramp — `sm` 1px, `md` 3px, `lg` 6px. The
+  workshop uses these and is visually unchanged by this ADR.
+- Two new steps, `xl` (14px) and `2xl` (28px), exist **for photographic frames
+  and floating surfaces only**: image cards, the header's pill bar, the footer's
+  top corners, full-bleed section bands.
+- `Button` gains a `shape` variant — `tight` (the default, so nothing moved) and
+  `pill`. The storefront passes `pill`; the workshop does not.
+
+The accompanying skin changes are not separate decisions and are recorded here
+for the record rather than argued: the accent ramp is re-dyed from madder
+(`#8a3623`) to brass (`#b8924a`, with `#8c6d33` as the text-safe step), the
+neutrals warm about a point towards marble, `display-3xl` is added for the one
+hero on a page, and `Fraunces` is loaded with its `opsz`, `SOFT` and `WONK` axes
+plus a real italic so that one word in a headline can be set as lettering.
+
+## Alternatives considered
+
+- **Refuse the reference and keep the restraint.** Defensible — the written
+  direction is good and was arrived at deliberately. Rejected because the
+  owner's own audience, on the owner's own channels, is a streetwear audience,
+  and the reference was supplied with the business's social accounts attached to
+  it. "Tight radii" was a means to "premium", not the goal.
+- **Change `--radius-lg` to 28px and let it apply everywhere.** One line. It
+  would have rounded every table cell, input, badge and menu in the admin, which
+  is the exact failure section 12 was written to prevent.
+- **Round everything on the storefront, controls included, via a second token
+  file loaded per route group.** Two sources of truth for one scale; the first
+  component shared between the two trees — and there are many — would have to
+  choose one, silently.
+- **Take the reference's colour as well.** The reference is orange-red on cream.
+  Rejected explicitly by the owner: brass is what the workshop's own photography
+  is full of, and the hot orange belongs to somebody else's brand.
+
+## Consequences
+
+- Positive: the storefront can be rebuilt from the reference's vocabulary
+  without a component ever writing a raw radius, because both ends of the scale
+  are named.
+- Positive: the workshop is untouched. `shape` defaults to `tight`, so this ADR
+  changed no admin screen.
+- Negative: there are now two correct answers to "how round is this", and the
+  answer depends on which half of the product the component is in. A component
+  shared by both — `Button` is the live example — has to be told. That is the
+  cost, and it is why the default is the conservative one.
+- Negative: `DESIGN-SYSTEM.md` section 1's "must not read as" list is now
+  slightly weaker than it was. The clause that mattered — *colour restraint,
+  near-black primaries, typography carrying the hierarchy* — is unchanged, and
+  that is the clause the redesign keeps.
+
+---
+
+# ADR-043: The embroidery preview is a rendering, never a file
+
+## Status
+
+Accepted — Phase 16.
+
+## Context
+
+The owner asked for the thing one of the reference sites does: the artwork a
+customer uploads should be shown **as embroidery** before they order it.
+
+The reason this is worth building is not decoration. A flat PNG of a logo
+answers almost none of the questions somebody has before paying to have it
+stitched. Thread has a small palette, a direction and a strong sheen; a
+gradient becomes six bands of colour, a photograph becomes mud, and hairline
+detail disappears. `designAdvice` has said so in words since Phase 7 — "sharp
+images with clear outlines and few colours embroider best" — and words are a
+much weaker instrument than a picture of the customer's own logo.
+
+The question an ADR has to answer is **where the effect lives in the system**,
+because the obvious answer is wrong in a way that is expensive to undo.
+
+## Decision
+
+**The stitched image is produced in the customer's browser, from a copy, and is
+never stored, never uploaded, and never shown to the workshop.**
+
+- `domain/embroidery` holds the model as pure functions — palette reduction,
+  thread geometry, the shadow in the valley and the light off the crown. No
+  I/O, no canvas, unit tested.
+- `lib/embroidery/render` is the canvas work: scale, read the pixels, run the
+  loop, hand back a data URL. The same split as `domain/media` and
+  `lib/media/shop-image`.
+- `components/commerce/StitchPreview` renders the original immediately and
+  swaps the render in when it is ready. Every failure path returns the original
+  picture.
+- The builder owns the stitched/original choice as view state, so the design
+  step and the placement editor always agree, and it is **not** part of
+  `BuilderState` — it is not a property of the order and the server has no use
+  for it.
+- The **workshop is never shown the stitched version.** The admin has to
+  digitise the real artwork; a stylised render of a file somebody must trace is
+  worse than no render at all.
+
+## Alternatives considered
+
+- **Render it server-side with `sharp` and store it beside the original.**
+  Faster for the customer and the obvious thing to reach for. Rejected: it
+  means decoding customer artwork into server memory on a request, it creates a
+  second artefact of a private file that then needs its own authorisation and
+  its own lifecycle, and ADR-024 keeps design files byte-for-byte precisely so
+  there is exactly one answer to "what did the customer send". A derived render
+  is a schema change and deserves its own ADR; it is not a side effect of
+  wanting a nicer preview.
+- **A CSS filter stack or an SVG `feTurbulence` / `feDisplacementMap`.** Cheap
+  and needs no pixel loop. Rejected because neither can do the part that
+  matters: the palette reduction is per-pixel and quantised, and a displacement
+  map distorts the artwork rather than lighting it — it makes a logo look
+  *damaged*, which is the opposite of the message.
+- **WebGL.** The right tool if this ever becomes real-time or much larger. At
+  512 pixels square the JavaScript loop is a few milliseconds, and a shader
+  would add a context, a fallback path and a dependency to save none of them.
+- **Applying it to the 3D model's texture too.** Tempting and deferred: the
+  model's UV compositing (ADR-036) already takes the artwork through a
+  different path, and doing this properly there means the stitch direction
+  should follow the garment's surface rather than the screen. Listed as not
+  done rather than done badly.
+
+## Consequences
+
+- Positive: the conversation about whether a design suits thread happens before
+  the order rather than in a complaint afterwards — which is the workshop's
+  single most common support cost.
+- Positive: nothing about storage, authorisation or the private bucket changed.
+  The feature added no server surface at all.
+- Positive: the model is unit tested, which a visual effect usually is not,
+  because the rules are separated from the canvas. Two real modelling errors
+  were caught that way and are recorded in the tests as the properties they
+  violate.
+- Negative: it is a per-pixel loop in JavaScript on the main thread. At
+  `PREVIEW_MAX_PX` it is a few milliseconds and there is one of them per
+  upload; at four times the size it would need a worker.
+- Negative: the effect is an *impression* of embroidery, not a simulation of
+  it. It does not know stitch density, underlay, pull compensation or what the
+  digitiser will actually do. The copy under it says what it is, and the
+  workshop's quote remains the authority.
+- Negative: a canvas tainted by a cross-origin preview silently loses the
+  effect. Handled — the original is shown — but if storage ever moves to a CDN
+  host, the CORS headers on signed URLs become load-bearing for this feature.

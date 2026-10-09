@@ -17,6 +17,7 @@ import { cn } from '@/components/ui/cn';
  */
 
 export type TextVariant =
+  | 'display-3xl'
   | 'display-2xl'
   | 'display-xl'
   | 'display-lg'
@@ -33,6 +34,7 @@ export type TextVariant =
   | 'mono-sm';
 
 const VARIANTS: Record<TextVariant, string> = {
+  'display-3xl': 'font-display text-display-3xl font-normal',
   'display-2xl': 'font-display text-display-2xl font-normal',
   'display-xl': 'font-display text-display-xl font-normal',
   'display-lg': 'font-display text-display-lg font-normal',
@@ -165,6 +167,8 @@ export type LabelProps = {
   htmlFor: string;
   required?: boolean;
   optional?: boolean;
+  /** The words for "optional", supplied by whoever can read a dictionary. */
+  optionalLabel?: string;
   className?: string;
   children: ReactNode;
 };
@@ -173,6 +177,16 @@ export function Label({
   htmlFor,
   required = false,
   optional = false,
+  /*
+   * The word, not a hard-coded "(optionnel)".
+   *
+   * This primitive renders in both trees — the storefront reads its language
+   * from the path, the workshop from a cookie — and it is a server component,
+   * so it cannot ask `useDictionary` for the word itself. `FormField` is a
+   * client component and supplies it; the French default keeps a direct caller
+   * working, and is the source language either way (rule 9A).
+   */
+  optionalLabel = '(optionnel)',
   className,
   children,
 }: LabelProps) {
@@ -191,8 +205,47 @@ export function Label({
         </span>
       )}
       {optional && (
-        <span className="text-fg-subtle text-caption font-normal">(optionnel)</span>
+        <span className="text-fg-subtle text-caption font-normal">{optionalLabel}</span>
       )}
     </label>
+  );
+}
+
+/**
+ * The one word in a headline that is set differently.
+ *
+ * *"A cafe that feels like **home**."* — the gesture the redesign is built
+ * around, and the reason `Fraunces` is loaded with its `WONK` axis and a real
+ * italic (`(site)/[locale]/layout.tsx`). `WONK` swaps in the swashed
+ * alternates, so the accented word reads as lettering set into the line rather
+ * than as the same face leaning over.
+ *
+ * **One per headline.** Two emphasised words in a sentence emphasise nothing,
+ * and this is the storefront's loudest typographic move — section 3's rule
+ * about the overline applies here with more force.
+ *
+ * It is an inline `<em>` rather than a `<span>` because it *is* emphasis: the
+ * distinction is audible to a screen reader, and the browser's own italic is
+ * overridden by the font-variation settings anyway.
+ */
+export function Accent({
+  className,
+  children,
+  ...rest
+}: Omit<TextProps, 'as' | 'variant' | 'tone'>) {
+  return (
+    <em
+      className={cn(
+        'font-display text-accent italic',
+        // `SOFT` rounds the terminals, `WONK` brings in the swashes. Neither is
+        // reachable from a Tailwind utility, and both are why this is a
+        // component rather than two classes repeated down the homepage.
+        "[font-variation-settings:'SOFT'_60,'WONK'_1]",
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </em>
   );
 }

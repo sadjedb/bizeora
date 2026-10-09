@@ -13,15 +13,14 @@ import type { NextConfig } from 'next';
  * framework: framing, base URI, object embedding and form targets.
  */
 const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "object-src 'none'",
-      "form-action 'self'",
-    ].join('; '),
-  },
+  /*
+   * No Content-Security-Policy here.
+   *
+   * It moved to `src/middleware.ts` in Phase 15, because the policy carries a
+   * nonce and a nonce has to be minted per request. Two CSP headers would both
+   * be enforced — a browser intersects them — so a leftover static one here
+   * would silently narrow the real policy and be very hard to see.
+   */
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {

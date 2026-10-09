@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { DEFAULT_LOCALE, isLocale, negotiateLocale } from '@/i18n/locales';
+import { isDevelopment } from '@/lib/env';
 
 /**
  * Sending a visitor to a language.
@@ -23,9 +24,13 @@ import { DEFAULT_LOCALE, isLocale, negotiateLocale } from '@/i18n/locales';
  * **`/admin` is untouched.** It has its own root layout and stays French; see
  * the comment in `app/(workshop)/layout.tsx`.
  *
- * Note for Phase 15: this file does **not** set a Content-Security-Policy. The
- * nonce-based CSP in `SECURITY.md` section 12 is still that phase's work, and
- * it belongs here when it lands.
+ * ## It also sets the Content-Security-Policy
+ *
+ * Two jobs in one file, because both need to happen before a response is built
+ * and a second middleware is not a thing Next offers. `SECURITY.md` section 12
+ * specifies a nonce-based policy, and a nonce has to be minted per request —
+ * which is why it lives here rather than in `next.config.ts` beside the headers
+ * that never change. See ADR-041 for what that costs.
  */
 
 export const LOCALE_COOKIE = 'NEXT_LOCALE';
@@ -58,16 +63,102 @@ function isUnlocalised(pathname: string): boolean {
   );
 }
 
+/**
+ * A fresh nonce, from the platform's own randomness.
+ *
+ * `crypto.randomUUID` rather than `Math.random`: a guessable nonce is not a
+ * nonce, and the whole policy rests on an attacker not being able to write one
+ * into injected markup. Base64 because that is the encoding the CSP grammar
+ * expects.
+ */
+function newNonce(): string {
+  return btoa(crypto.randomUUID());
+}
+
+/**
+ * The policy, built around one nonce.
+ *
+ * Follows `SECURITY.md` section 12 directive for directive. The two that are
+ * worth reading twice:
+ *
+ * **`script-src` has no `'unsafe-inline'`.** Next streams its hydration payload
+ * through inline `<script>` elements, so the only ways to allow them are a
+ * nonce or `'unsafe-inline'`, and the second allows every injected script as
+ * well. `'strict-dynamic'` then lets a nonced script load the chunks it needs
+ * without every chunk URL being listed.
+ *
+ * **`style-src` keeps `'unsafe-inline'`.** Next's font loader and React's own
+ * inline styles need it, and there is no nonce path for styles that does not
+ * mean rewriting every `style` attribute in the application. An injected
+ * stylesheet is a defacement risk rather than an execution one, which is a
+ * different order of problem.
+ */
+function contentSecurityPolicy(nonce: string, development: boolean): string {
+  return [
+    "default-src 'self'",
+    /*
+     * `'unsafe-eval'` in development only. The dev server's React refresh
+     * compiles modules in the browser; production never does, and a policy
+     * that allowed it there would allow the most useful primitive an injected
+     * script could ask for.
+     */
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    // `data:` for the blur placeholders the image pipeline emits, `blob:` for
+    // the canvas the 3D viewer and the placement editor draw into.
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    // A garment model is fetched by `three` as an ordinary asset; without this
+    // it falls under `default-src` and is refused.
+    "worker-src 'self' blob:",
+    "media-src 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    'upgrade-insecure-requests',
+  ].join('; ');
+}
+
+/**
+ * The response every path through this middleware returns.
+ *
+ * The nonce travels two ways at once, and both are needed: **down** to the
+ * browser in the policy header, and **back in** on the request headers, which
+ * is how a server component reads the value it must put on its inline scripts.
+ * Next forwards the request headers it is given to the render.
+ */
+function withPolicy(request: NextRequest, redirectTo?: URL): NextResponse {
+  const nonce = newNonce();
+  const policy = contentSecurityPolicy(nonce, isDevelopment);
+
+  const headers = new Headers(request.headers);
+  headers.set(NONCE_HEADER, nonce);
+  headers.set('content-security-policy', policy);
+
+  const response = redirectTo
+    ? NextResponse.redirect(redirectTo)
+    : NextResponse.next({ request: { headers } });
+
+  response.headers.set('content-security-policy', policy);
+
+  return response;
+}
+
+/** The request header a server component reads the nonce from. */
+export const NONCE_HEADER = 'x-nonce';
+
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
-  if (isUnlocalised(pathname)) return NextResponse.next();
+  if (isUnlocalised(pathname)) return withPolicy(request);
 
   // A file with an extension — `/apple-touch-icon.png` and friends.
   if (/\.[a-z0-9]+$/i.test(pathname)) return NextResponse.next();
 
   const first = pathname.split('/')[1] ?? '';
-  if (isLocale(first)) return NextResponse.next();
+  if (isLocale(first)) return withPolicy(request);
 
   const cookie = request.cookies.get(LOCALE_COOKIE)?.value;
   const locale = isLocale(cookie)
@@ -77,7 +168,7 @@ export function middleware(request: NextRequest): NextResponse {
   const url = request.nextUrl.clone();
   url.pathname = pathname === '/' ? `/${locale}` : `/${locale}${pathname}`;
 
-  const response = NextResponse.redirect(url);
+  const response = withPolicy(request, url);
 
   // Remember the negotiated choice, so the next bare link does not renegotiate
   // and so a visitor who switched language stays switched.

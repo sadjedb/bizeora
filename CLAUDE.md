@@ -8,7 +8,8 @@ Working rules are in `AGENTS.md`. This file is orientation only.
 **Bizeora** — a custom embroidery ordering platform, e-commerce store,
 customer portal and admin dashboard for a small embroidery business in Algeria.
 
-**Current state: Phases 0 to 14.12 are complete, Phase 8A included.** The application is real and
+**Current state: Phases 0 to 14.15 are complete, Phase 8A included, Phase 15 partly, and Phase 16
+— the redesign — through 16.5.** The application is real and
 runs end to end. A visitor can browse the shop and the gallery, configure an embroidery, submit a
 request, receive a quote, accept it, check out, follow the order from their account and review what
 was delivered; the workshop can create and price the products it sells, hold stock for them, price
@@ -33,22 +34,29 @@ the front page at `/admin/content`; since Phase 14.9, multi-select and archiving
 workshop list (ADR-034); since Phase 14.10, a customer who drags their artwork onto a photograph of
 the garment and sizes it there, stored as four percentages in texture space and drawn back for the
 workshop (ADR-035, ADR-036); since Phase 14.11, a checkout that asks for a size once and an e-mail
-address never; and, since Phase 14.12, a settings screen at `/admin/settings` that renames the
-shop, closes it to the public and switches e-mail verification off (ADR-037, ADR-038).
+address never; since Phase 14.12, a settings screen at `/admin/settings` that renames the
+shop, closes it to the public and switches e-mail verification off (ADR-037, ADR-038); and,
+since Phase 14.13, a catalogue that can be searched, filtered, ordered and paged — every
+narrowing an address rather than component state — with category listings at `/shop/c/[category]`
+and a screen in the workshop that creates them (ADR-039); and, since Phase 14.14, a **bilingual
+catalogue**: product names, descriptions, category names, gallery captions and the banner carry an
+English overlay with French as the per-field fallback, written from an English panel on the same
+forms (ADR-040); and, since Phase 14.15, a **3D view of the garment** on the product page, with the
+customer's design composited into the model's UV map by the same transform that places it on a
+photograph, `three` loaded only when somebody asks for it, and a card in the workshop that attaches
+a `.glb` after parsing it; and, since Phase 15, a **nonce-based Content-Security-Policy** set in
+the middleware and **rate limiting** on login, registration, design upload and the guest order
+lookup (ADR-041).
 
 **What is not built** — and must not be assumed — is the rest of Phase 12's outstanding admin half
 (gallery curation, the audit-log viewer, admin dark mode, the guest half of the customer
-directory), the 3D viewer and the admin's model-upload card that ADR-036's parser was written for,
-category management, the `/shop/c/[category]` listing, the `pages`- and
-`faqs`-backed storefront routes, a configured e-mail provider (the transport is real; no key is
+directory), the `pages`- and `faqs`-backed storefront routes, a configured e-mail provider (the transport is real; no key is
 set, so the development transport logs and delivers nothing), a cron entry calling the dispatcher,
 **a screen for entering an e-mail verification code or resetting a password** (both flows exist
 since Phase 3.1; neither has a customer-facing screen),
-the storefront's search, filter and pagination controls, **real photography** (the pipeline is
+**real photography** (the pipeline is
 built and the files in `public/assets` are placeholders — the owner supplies the pictures),
-**translated catalogue content** (the interface, the workshop and the homepage's bands are
-bilingual; product names, descriptions, gallery captions and the banner strip are single-language
-rows that read in French in both languages), a dark admin, and every V1.5/V2 feature. **The site is not indexable until `SEO_INDEXABLE=true` is set** — that is deliberate
+a dark admin, and every V1.5/V2 feature. **The site is not indexable until `SEO_INDEXABLE=true` is set** — that is deliberate
 (ADR-028) and Phase 18 sets it. The authoritative list of what each phase deliberately left out is in `tasks/CURRENT.md`,
 phase by phase.
 
@@ -58,7 +66,7 @@ orientation and goes stale between phases.
 The documentation was reviewed before implementation and 22 corrections applied. The decisions
 that came out of that review are ADR-015 and ADR-016, plus amendments to ADR-005, ADR-006, ADR-010
 and ADR-011. If something in the docs looks surprising, check those first — it is probably
-deliberate. Thirty-eight ADRs exist in total.
+deliberate. Forty-three ADRs exist in total.
 
 ## Read This First
 
@@ -141,6 +149,33 @@ listed in `PRODUCT.md` section 9 with reasoning in `DECISIONS.md`.
    outside it so that closing the shop cannot lock the owner out of `/admin`. Nothing reads a
    cookie in that decision — a request-specific read inside a prerendered route is a 500, not a
    stale page. See ADR-038.
+9H. **The catalogue is translated by an overlay, and French is the fallback.** A row's
+   `translations` column holds `{"en": {…}}`; `localise(row, overlay, locale, fields)` merges it at
+   the **repository boundary**, so a page never translates anything itself. Name the fields — an
+   overlay is written by a form, and merging it wholesale is a way to set a price. Blank means "not
+   translated", never "translated to nothing". See ADR-040.
+9I. **Nothing under the storefront layout is prerendered, and an inline script carries a nonce.**
+   The Content-Security-Policy is built per request in `src/middleware.ts`; a component that
+   renders an inline `<script>` reads its nonce from `lib/security/nonce`, which makes the route
+   dynamic — that is what a nonce is, not a bug to work around. Never add `'unsafe-inline'` to
+   `script-src`. See ADR-041.
+9J. **A rate limit is a business rule.** The limits live in `domain/rate-limit` next to the
+   deposit percentage, not in the storage client; `throttle` is the one line an action calls.
+   Counting happens **before** the decision, so two simultaneous requests cannot both pass a limit
+   of one. `SECURITY.md` section 9.
+9K. **The storefront is rounded; the workshop is not.** `--radius-xl` and `--radius-2xl` are for
+   photographic frames and floating surfaces only, and `Button`'s `shape` defaults to `tight` so
+   the admin never changed. A component shared by both halves has to be told which side it is on.
+   See ADR-042.
+9L. **The embroidery preview is a rendering, never a file.** The stitch effect runs in the
+   browser, on a copy, for display; the stored artwork stays byte-for-byte what the customer sent
+   (ADR-024), and the workshop is shown the original because it has to digitise it. The model is
+   in `domain/embroidery` and the canvas work in `lib/embroidery` — the same split as
+   `domain/media`. See ADR-043.
+9M. **One word in a headline is emphasised, and which word is content.** The row says
+   `Vos idées, *brodées.*`; `headingSegments` splits it. It cannot be code, because the emphasised
+   word is in a different position in each language. One pair of asterisks is the only markup the
+   system understands, and nothing else in the field is interpreted.
 10. **Authentication and authorisation are separate.** Better Auth does credentials and sessions
     only; every permission decision lives in `domain/permissions`, and no Better Auth type leaves
     `lib/auth/`. See ADR-006.

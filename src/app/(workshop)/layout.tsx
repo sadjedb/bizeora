@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Fraunces, Instrument_Sans, JetBrains_Mono } from 'next/font/google';
 
 import { ThemeScript } from '@/components/ui/theme';
+import { scriptNonce } from '@/lib/security/nonce';
 import { ToastProvider } from '@/components/ui/toast';
 import { DictionaryProvider } from '@/i18n/client';
 import { LOCALE_TAGS } from '@/i18n/locales';
@@ -79,7 +80,7 @@ export const viewport: Viewport = {
 export default async function WorkshopRootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const { locale, t } = await workshopDictionary();
+  const [{ locale, t }, nonce] = await Promise.all([workshopDictionary(), scriptNonce()]);
 
   return (
     <html
@@ -88,7 +89,7 @@ export default async function WorkshopRootLayout({
       suppressHydrationWarning
     >
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
       </head>
       <body className="min-h-dvh antialiased">
         <a href="#main" className="skip-link">

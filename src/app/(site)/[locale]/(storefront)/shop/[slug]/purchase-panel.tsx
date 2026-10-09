@@ -150,7 +150,7 @@ export function PurchasePanel({
                     }));
                   }}
                   className={[
-                    'min-h-11 min-w-11 rounded-sm border px-4',
+                    'min-h-11 min-w-11 rounded-full border px-5',
                     'text-body-sm transition-colors duration-fast ease-out',
                     'focus-visible:shadow-focus focus-visible:outline-none',
                     'motion-reduce:transition-none',
@@ -189,7 +189,8 @@ export function PurchasePanel({
 
       <Stack gap={3}>
         <Button
-          size="lg"
+          size="xl"
+          shape="pill"
           fullWidth
           loading={pending}
           disabled={!available || !selectedVariant}

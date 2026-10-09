@@ -39,6 +39,7 @@ function sectionNames(t: Dictionary): Record<HomepageSectionType, string> {
   return {
     BANNER: t.admin.bandBanner,
     HERO: t.admin.bandHero,
+    MARQUEE: t.admin.bandMarquee,
     HOW_IT_WORKS: t.admin.bandHowItWorks,
     CATEGORY_GRID: t.admin.bandCategories,
     FEATURED_PRODUCTS: t.admin.bandFeatured,

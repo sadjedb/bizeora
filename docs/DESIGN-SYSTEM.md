@@ -94,34 +94,48 @@ side and, in practice, makes an order number instantly recognisable as an identi
 distinctive without being fashionable-for-its-own-sake, and each has a genuine job — the fastest
 way to look like a template is three fonts chosen for variety.
 
-**Fraunces axes**: `opsz` scales with size, `SOFT` at 20 for warmth, `WONK` at 0 for headings and
-1 only for the hero — enough character to be recognisable, not enough to be a costume.
+**Fraunces axes**: `opsz` scales with size, `SOFT` for warmth, `WONK` at 0 for headings and 1 only
+for the accented word — enough character to be recognisable, not enough to be a costume.
+
+**Phase 16 made these real.** They had been documented and not requested: `next/font` ships only
+`wght` unless the other axes are named, so `SOFT` and `WONK` were inert and every italic on the
+site was a browser-slanted roman. The storefront now loads `opsz`, `SOFT`, `WONK` and a true
+italic. The axes pay for themselves at the two ends of the scale — the display cut at 128 px and
+the text cut at 17 px are one family set correctly, rather than two families.
+
+**The accented word.** One word in a headline is set in italic `WONK` 1 at `--color-accent`: the
+`Accent` primitive in `components/ui/typography.tsx`. It is the storefront's loudest typographic
+move and the gesture the marketing layout is built around. **One per headline** — two emphasised
+words emphasise nothing.
 
 ### Scale
 
 Fluid between 375 px and 1440 px viewports.
 
-| Token         | Min  | Max  | Line height | Tracking | Family               |
-| ------------- | ---- | ---- | ----------- | -------- | -------------------- |
-| `display-2xl` | 40px | 88px | 0.95        | −0.03em  | Display              |
-| `display-xl`  | 34px | 64px | 1.0         | −0.025em | Display              |
-| `display-lg`  | 28px | 44px | 1.08        | −0.02em  | Display              |
-| `display-md`  | 24px | 32px | 1.15        | −0.015em | Display              |
-| `heading-lg`  | 20px | 24px | 1.25        | −0.01em  | Text, 600            |
-| `heading-md`  | 17px | 18px | 1.35        | −0.005em | Text, 600            |
-| `heading-sm`  | 15px | 15px | 1.4         | 0        | Text, 600            |
-| `body-lg`     | 17px | 18px | 1.6         | 0        | Text, 400            |
-| `body`        | 15px | 16px | 1.6         | 0        | Text, 400            |
-| `body-sm`     | 13px | 14px | 1.55        | 0        | Text, 400            |
-| `caption`     | 12px | 12px | 1.4         | 0.01em   | Text, 500            |
-| `overline`    | 11px | 11px | 1.2         | 0.14em   | Text, 600, uppercase |
-| `mono`        | 13px | 13px | 1.4         | 0        | Technical            |
-| `mono-sm`     | 11px | 11px | 1.35        | 0.02em   | Technical            |
+| Token         | Min  | Max   | Line height | Tracking | Family               |
+| ------------- | ---- | ----- | ----------- | -------- | -------------------- |
+| `display-3xl` | 48px | 128px | 0.92        | −0.035em | Display              |
+| `display-2xl` | 40px | 88px  | 0.95        | −0.03em  | Display              |
+| `display-xl`  | 34px | 64px  | 1.0         | −0.025em | Display              |
+| `display-lg`  | 28px | 44px  | 1.08        | −0.02em  | Display              |
+| `display-md`  | 24px | 32px  | 1.15        | −0.015em | Display              |
+| `heading-lg`  | 20px | 24px  | 1.25        | −0.01em  | Text, 600            |
+| `heading-md`  | 17px | 18px  | 1.35        | −0.005em | Text, 600            |
+| `heading-sm`  | 15px | 15px  | 1.4         | 0        | Text, 600            |
+| `body-lg`     | 17px | 18px  | 1.6         | 0        | Text, 400            |
+| `body`        | 15px | 16px  | 1.6         | 0        | Text, 400            |
+| `body-sm`     | 13px | 14px  | 1.55        | 0        | Text, 400            |
+| `caption`     | 12px | 12px  | 1.4         | 0.01em   | Text, 500            |
+| `overline`    | 11px | 11px  | 1.2         | 0.14em   | Text, 600, uppercase |
+| `mono`        | 13px | 13px  | 1.4         | 0        | Technical            |
+| `mono-sm`     | 11px | 11px  | 1.35        | 0.02em   | Technical            |
 
 ### Rules
 
 - Body copy never exceeds **68 characters** per line. Editorial paragraphs sit at 60–65.
-- One `display-2xl` per page, at most. Usually the hero.
+- `display-3xl` is the hero and nothing else: **one per page, and most pages have none.** At that
+  size the type is the composition rather than a label on one. `display-2xl` is the ceiling
+  everywhere else.
 - `overline` marks section eyebrows ("01 — Choose your product", "OUR WORK"). It is the system's
   most recognisable typographic signature and must not be overused: one per section.
 - Numerals: tabular in tables, prices and quantities; proportional in prose.
@@ -135,6 +149,11 @@ Fluid between 375 px and 1440 px viewports.
 > **Revised in Phase 14.5.** The first direction was warm to the point of sepia and the accent sat
 > close enough to the neutrals to stop reading as an accent. The strategy below is unchanged; the
 > values are not. `styles/tokens.css` is the source of truth and this section describes it.
+>
+> **Revised again in Phase 16** (ADR-042). The accent is brass rather than madder, and the
+> neutrals warm about a point towards marble. The strategy is *still* unchanged — one accent, 5% of
+> a screen, ink primaries — which is the point: two redesigns have now re-dyed this system without
+> touching a component, because no component has ever contained a colour.
 
 ### Strategy
 
@@ -151,37 +170,42 @@ decision that most separates this from a generic store.
  * Cooled in Phase 14.5: the previous ramp leaned brown (#7a7268, #d8d2c8) and
  * read as a sepia filter over the interface. The atelier direction needs a
  * ground closer to gallery-wall neutral so the work carries the colour. */
---ink-950: #100f0e;
---ink-900: #1a1917;
---ink-800: #2c2a27;
---ink-700: #423f3b;
---ink-600: #5b574f;
---ink-500: #6c675e; /* the contrast floor for the smallest type — see section 14 */
---ink-400: #96918a;
---ink-300: #b8b3ab;
---ink-200: #d5d0c8;
---ink-100: #e7e3dc;
---ink-50: #f2f0ea;
+--ink-950: #121110;
+--ink-900: #1c1a18;
+--ink-800: #2e2b27;
+--ink-700: #45413a;
+--ink-600: #5d574e;
+--ink-500: #666055; /* the contrast floor for the smallest type — see section 14 */
+--ink-400: #98928a;
+--ink-300: #bab4ab;
+--ink-200: #d7d2c8;
+--ink-100: #e8e4da;
+--ink-50: #f3f1ea;
 
 /* Paper — bone grounds, one step cooler than the previous warm off-whites */
 --paper-0: #ffffff;
---paper-50: #faf9f6;
---paper-100: #f4f2ed;
---paper-200: #eae7e0;
+--paper-50: #faf8f3;
+--paper-100: #f3f0e8;
+--paper-200: #e9e4d8;
 
-/* Thread — the accent: one dyed madder.
- * Shifted from the previous ochre/terracotta (#9a4e26), which was close enough
- * to the warm neutrals to read as part of the ground. Madder is redder and
- * darker: it separates cleanly from bone and is unmistakably a dye. */
---thread-900: #46180f;
---thread-800: #642619;
---thread-700: #8a3623;
---thread-600: #a5462f;
---thread-500: #bd6144;
---thread-400: #d28f76;
---thread-300: #e5bcaa;
---thread-200: #f0d8cc;
---thread-100: #f9ece5;
+/* Thread — the accent: one spool of brass.
+ * Re-dyed in Phase 16 from madder (#8a3623), which was chosen when the brief
+ * said only "warm neutrals and a dye". The workshop's own feed turned out to be
+ * marble grounds, black and cream garments, gold thread and gold-headed
+ * mannequins, under the words "LUXURY EMBROIDERY" — brass is that, and
+ * red-brown was a guess at it. The ramp splits its duties rather than being one
+ * colour, because a gold dark enough to carry text is not the gold anybody
+ * means by gold. Keep it low in chroma: saturating it is the one change that
+ * would make this read as a discount banner. */
+--thread-900: #2f2410;
+--thread-800: #4a3818;
+--thread-700: #7d6028; /* the accent for TEXT — >= 5:1 on every ground */
+--thread-600: #96763a;
+--thread-500: #b8924a; /* the brand gold — fills, rules, display type */
+--thread-400: #cbac72; /* the dark theme's accent — 8.7:1 on ink */
+--thread-300: #dcc79b;
+--thread-200: #eadcc0;
+--thread-100: #f5eede;
 
 /* Status — deliberately desaturated: an operations screen shows twenty badges
  * at once and must not read as a rainbow. */
@@ -246,7 +270,7 @@ Components use only these. A component that references a raw scale value is a de
 
 --color-accent: var(--thread-700);
 --color-accent-hover: var(--thread-800);
---color-accent-subtle: var(--thread-100);
+--color-accent-subtle: var(--thread-100); /* the ground for a chip or a badge */
 --color-focus: var(--thread-700);
 --color-overlay: rgb(16 15 14 / 0.55);
 ```
@@ -329,19 +353,29 @@ Alternating contained and full-bleed sections is what stops the homepage reading
 
 ## 7. Radius, Borders, Elevation
 
-### Radius — deliberately tight
+### Radius — tight for controls, generous for photography
 
 ```
 --radius-none: 0
 --radius-sm:   1px    inputs, chips, badges, small controls
 --radius-md:   3px    buttons, cards, dialogs, tables
---radius-lg:   6px    sheets, large panels, images
---radius-full: 9999px pills and avatars only
+--radius-lg:   6px    sheets, large panels
+--radius-xl:   14px   photographic frames, floating surfaces     (Phase 16)
+--radius-2xl:  28px   large image cards, full-bleed band corners (Phase 16)
+--radius-full: 9999px pills, avatars, storefront calls to action
 ```
 
-Large radii are the fastest way to look like a consumer app. **Flattened again in Phase 14.5** —
-4 px still read as soft at button and card scale beside the new type. Product imagery uses
-`--radius-lg`; the interface stays at 1–3 px.
+**The scale splits by surface, not by size — ADR-042.** Large radii on an *interface* are the
+fastest way to look like a consumer app, and the workshop is an interface: it stays at 1–6 px and
+was not touched by Phase 16. Large radii on a *photograph* are the opposite — a garment in a 28 px
+frame reads as a printed card laid on the page, and the same garment at 6 px reads as a `<div>`
+with a picture in it. The storefront's layout is built out of that one gesture.
+
+`xl` and `2xl` are for photographic frames and floating surfaces only. They are not an invitation
+to round a table.
+
+**Controls**: `Button` carries a `shape` variant — `tight` (3 px, the default, which is why no
+admin screen changed) and `pill`. The storefront passes `pill`; the workshop does not.
 
 ### Borders
 
@@ -579,8 +613,64 @@ The catalogue is the brand's showroom; these rules are not optional.
 | Skeleton            | A slow shimmer, 1.4 s, disabled under reduced motion                                                    |
 | Accordion           | Height plus opacity, 200 ms                                                                             |
 
+### Continuous motion — Phase 16
+
+Everything above *responds* to something. The redesign added the opposite kind: motion that is
+already running when you arrive. **There are three, and the list is closed** — the fourth is where
+a page starts to feel like a demo reel.
+
+| Element           | Motion                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| Marquee strip     | Linear translate of −50% over a duration derived from the text length; pauses on hover    |
+| Spinning badge    | 360° rotation, ~22 s, linear                                                               |
+| Scroll reveal     | 16 px rise plus fade, driven by a **view timeline**, `entry 0%` → `cover 20%`             |
+
+All three are **CSS only** — no `IntersectionObserver`, no measurement, no hydration — which is why
+`components/ui/motion.tsx` exports server components. Under the nonce policy (ADR-041) nothing on
+the storefront is prerendered, so anything that had to hydrate before it looked right would be
+visibly late.
+
+**Reduced motion needs care here, and it is the one thing to get right.** The global rule in
+`globals.css` crushes every animation to 0.01 ms. For a finite animation that removes it; for an
+*infinite* one it is the same animation at three thousand frames of progress per second, which is
+the worst possible response to somebody asking for less motion. So:
+
+- the marquee and the badge carry `motion-reduce:animate-none` **themselves** (asserted in
+  `tests/components/primitives.test.tsx`);
+- the scroll reveal's rule is withheld entirely behind `prefers-reduced-motion: no-preference`,
+  because shortening a scroll-driven animation does nothing — its progress comes from the scroller,
+  not from a clock.
+
+The reveal is additionally wrapped in `@supports (animation-timeline: view())`, so where the
+mechanism is missing the element is simply **there**. A decoration that hides content when its
+mechanism is unsupported is a bug, not a graceful degradation.
+
+Scroll reveals stay on marketing surfaces. A product list that fades its rows in is a product list
+that feels slow.
+
+### The intro
+
+One page-load animation exists, and it is the exception the rest of this section is written
+against. On a first arrival the storefront opens on an ivory panel: the mark rises, a line of
+**running stitch** is laid beneath it left to right, and the panel lifts away. 1.42 seconds, and the
+timeline lives entirely in the three `--animate-intro-*` tokens.
+
+It is allowed because four things are true of it, and it would not be allowed otherwise:
+
+- **It never hides the page from somebody who cannot see it leave.** `pointer-events: none` for its
+  whole life, `aria-hidden`, and it ends at `visibility: hidden` — out of hit-testing and out of
+  the accessibility tree.
+- **The default is off.** The panel is `display: none` until `IntroScript` opts in. No JavaScript, a
+  blocked script or a refused nonce all mean *no intro*, never a blank rectangle that stays.
+- **Once per session**, via `sessionStorage` — not once per navigation.
+- **Reduced motion skips it in the script, not in the stylesheet.** The global rule shortens
+  durations; this animation is held by a one-second *delay*, which a duration rule does not touch.
+
+It costs roughly 1.4 s of Largest Contentful Paint on a cold arrival. The page renders underneath
+it throughout — nothing is deferred — but that cost is real and is the reason for the ceiling.
+
 **Not used**: parallax, scroll-jacking, cursor followers, animated counters, typewriter text,
-page-load animations, autoplaying carousels.
+autoplaying carousels, and any second page-load animation.
 
 ---
 

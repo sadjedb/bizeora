@@ -131,6 +131,7 @@ function fieldLabels(t: Dictionary): Record<string, string> {
     limit: t.admin.fieldLimit,
     showDelivery: t.admin.fieldShowDelivery,
     points: t.admin.fieldPoints,
+    words: t.admin.fieldWords,
   };
 }
 

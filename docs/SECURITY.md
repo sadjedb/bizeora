@@ -50,7 +50,7 @@ in `src/lib/auth/config.ts`.
 | Session rotation   | A new session token is issued on login; `revokeSessionsOnPasswordReset` deletes every session on a password reset                              |
 | Email verification | **8-digit one-time code** (`emailOTP` plugin), 15-minute expiry, **single-use**, 3 attempts, encrypted at rest. Required before accepting a quote, not before browsing. See section 2.1 and ADR-021 |
 | Password reset     | Single-use token in `verification`, **SHA-256 hashed at rest**, 1-hour expiry, consumed atomically on use. The response is identical whether or not the address exists |
-| Login throttling   | **Not yet implemented.** 5 attempts per identifier per 15 minutes plus a per-IP limit is specified in section 9 and belongs to Phase 15 with the rest of rate limiting |
+| Login throttling   | **Implemented in Phase 15.** 5 attempts per identifier and 20 per address, each per 15 minutes, counted before the password is checked. See section 9 |
 | Enumeration        | Registration answers a duplicate address with a synthetic user, a null token and no email, and hashes the submitted password anyway so the timing matches. Reset answers identically for an unknown address |
 | Admin accounts     | Provisioned by seed or by an existing admin. No public admin registration route exists                                                          |
 | Authorisation      | **Not Better Auth's.** `users.role` is our column, every decision is a pure function in `domain/permissions`, and no Better Auth type leaves `lib/auth/` |
@@ -531,6 +531,31 @@ Limits are enforced in Upstash Redis behind an adapter, with a Postgres fallback
 degrades to slower limiting rather than to none. Exceeding a limit returns a generic message and
 `Retry-After`, never a count of remaining attempts.
 
+**What Phase 15 built is the Postgres half**, in `lib/rate-limit`, and it is deliberately the half
+built first: there is no Redis in this deployment, and a limiter that exists only in a service
+nobody has signed up for is not enforcing anything. Every caller goes through `consume`, so Redis
+arrives one day as a second implementation of one function rather than as a change at every call
+site.
+
+The counter is a fixed window whose start is part of the key, which makes incrementing a single
+atomic `INSERT … ON CONFLICT DO UPDATE` — two simultaneous requests get 1 and 2 rather than both
+getting 1. That property is what the integration suite tests, because it is the only one that
+cannot be tested without a database. A fixed window allows a burst across a boundary; a sliding one
+would not and costs a row per attempt, and for "stop credential stuffing" the trade is the right
+way round.
+
+**A refused attempt still counts**, which is correct: an attacker's refused attempts are exactly
+what the limit measures. **A database failure allows the request** — a limiter that cannot reach
+its store must not take the shop down — and says so in the log.
+
+Enforced at: login, registration, design upload and the guest order lookup. The remaining rows of
+the table above have their limits defined in `domain/rate-limit` and are not yet wired to their
+call sites.
+
+`RATE_LIMIT=off` disables every limit. It exists for the end-to-end suite, which registers dozens
+of accounts from one address in a few minutes — precisely the traffic these limits refuse — and it
+announces itself in the log the first time the limiter is asked.
+
 ---
 
 ## 10. Customer Data Protection
@@ -725,13 +750,19 @@ Verified before V1 goes live:
 - [ ] SVG upload with an embedded script is rejected or sanitised, and never renders
 - [ ] A file whose extension disagrees with its magic number is rejected
 - [ ] Upload size and count limits hold when the client's declared values are forged
-- [ ] Rate limits are effective on login, upload, guest lookup and contact
+- [x] Rate limits are effective on login, upload and guest lookup — Phase 15. There is no contact
+      form to limit
 - [ ] Session cookies carry `HttpOnly`, `Secure` and `SameSite`
 - [ ] Password reset does not disclose whether an address exists
 - [ ] Admin routes are inaccessible to a `CUSTOMER` session at both the layout and action layers
-- [ ] CSP is enforced and the site functions without inline scripts outside the framework's nonce
-- [ ] All security headers are present in production
+- [x] CSP is enforced and the site functions without inline scripts outside the framework's nonce —
+      Phase 15, ADR-041. Verified in a browser across every storefront route with zero violations
+- [x] All security headers are present in production — the policy from the middleware, the rest
+      from `next.config.ts`
 - [ ] No secret is exposed to the client bundle
 - [ ] PII is scrubbed from logs and error reports
 - [ ] Audit logging fires for file access, PII views and status changes
-- [ ] Dependency audit is clean of high and critical advisories
+- [x] Dependency audit is clean of high and critical advisories — Phase 15. Four high advisories in
+      the Prisma CLI's transitive tree (`mysql2`, `deepmerge-ts`) were closed with `overrides` in
+      `package.json` rather than by taking npm's suggested downgrade to Prisma 6, which would have
+      undone the Prisma 7 architecture. `npm audit` reports zero

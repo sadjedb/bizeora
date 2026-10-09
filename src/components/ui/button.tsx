@@ -27,7 +27,7 @@ export const buttonVariants = cva(
   [
     'inline-flex items-center justify-center gap-2 whitespace-nowrap',
     'font-sans font-medium',
-    'rounded-md border border-transparent',
+    'border border-transparent',
     'transition-[background-color,border-color,color,transform]',
     'duration-fast ease-out',
     'cursor-pointer select-none',
@@ -56,12 +56,29 @@ export const buttonVariants = cva(
         lg: 'h-12 px-6 text-body',
         xl: 'h-14 px-8 text-body-lg',
       },
+      /**
+       * Corner treatment, and the one place the two halves of the product are
+       * allowed to look different (ADR-042).
+       *
+       * `tight` is the system's original 3px and stays the default, so the
+       * workshop — where a screen is an instrument and a soft control reads as
+       * a toy — did not change at all when this was added. `pill` is the
+       * storefront's call to action.
+       *
+       * It is a variant rather than a token change because those are genuinely
+       * two decisions: `--radius-md` is "how round is a control", and this is
+       * "which side of the product is the control on".
+       */
+      shape: {
+        tight: 'rounded-md',
+        pill: 'rounded-full',
+      },
       fullWidth: {
         true: 'w-full',
         false: '',
       },
     },
-    defaultVariants: { variant: 'primary', size: 'md', fullWidth: false },
+    defaultVariants: { variant: 'primary', size: 'md', shape: 'tight', fullWidth: false },
   },
 );
 
@@ -80,6 +97,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     className,
     variant,
     size,
+    shape,
     fullWidth,
     asChild = false,
     loading = false,
@@ -102,7 +120,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     return (
       <Slot.Root
         ref={ref}
-        className={cn(buttonVariants({ variant, size, fullWidth }), className)}
+        className={cn(buttonVariants({ variant, size, shape, fullWidth }), className)}
         {...props}
       >
         {children}
@@ -113,7 +131,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
-      className={cn(buttonVariants({ variant, size, fullWidth }), className)}
+      className={cn(buttonVariants({ variant, size, shape, fullWidth }), className)}
       // A button inside a form defaults to submit, which is rarely intended.
       type={type ?? 'button'}
       disabled={disabled || loading}

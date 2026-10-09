@@ -325,6 +325,7 @@ enum ActorType {
 
 enum HomepageSectionType {
   HERO
+  MARQUEE
   CATEGORY_GRID
   HOW_IT_WORKS
   CUSTOM_CTA
@@ -578,6 +579,8 @@ model Category {
   seoTitle       String?   @map("seo_title")
   seoDescription String?   @map("seo_description")
   isActive       Boolean   @default(true) @map("is_active")
+  /// English overlay, keyed by locale then by column. See ADR-040.
+  translations   Json?
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -650,6 +653,8 @@ model Product {
   seoTitle               String?       @map("seo_title")
   seoDescription         String?       @map("seo_description")
   ogImageKey             String?       @map("og_image_key")
+  /// English overlay, keyed by locale then by column. See ADR-040.
+  translations           Json?
   publishedAt            DateTime?     @map("published_at") @db.Timestamptz(6)
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1080,6 +1085,12 @@ model CustomizationConfig {
   @@index([ownerUserId, createdAt(sort: Desc)])
   @@index([productId])
   @@index([clonedFromConfigId])
+  /// Created by hand in `20260909210000_visual_placement` and never declared
+  /// here, which made it drift: every later migration wanted to drop it, and
+  /// in Phase 16 one of them did. Declared now so the schema and the database
+  /// agree. It serves the workshop's "which configurations use this
+  /// photograph?" lookup when a surface image is replaced (ADR-035).
+  @@index([designSurfaceImageId])
   @@map("customization_configs")
 }
 
@@ -1711,6 +1722,8 @@ model GalleryItem {
   sourceOrderId      String?   @map("source_order_id") @db.Uuid
   sourceDesignFileId String?   @map("source_design_file_id") @db.Uuid
   customerConsentAt  DateTime? @map("customer_consent_at") @db.Timestamptz(6)
+  /// English overlay, keyed by locale then by column. See ADR-040.
+  translations       Json?
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -1752,14 +1765,16 @@ model HomepageSection {
 }
 
 model Banner {
-  id       String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  message  String
-  href     String?
-  variant  String?
-  startsAt DateTime  @default(now()) @map("starts_at") @db.Timestamptz(6)
-  endsAt   DateTime? @map("ends_at") @db.Timestamptz(6)
-  isActive Boolean   @default(true) @map("is_active")
-  position Int       @default(0)
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  message      String
+  href         String?
+  variant      String?
+  startsAt     DateTime  @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime? @map("ends_at") @db.Timestamptz(6)
+  isActive     Boolean   @default(true) @map("is_active")
+  position     Int       @default(0)
+  /// English overlay, keyed by locale then by column. See ADR-040.
+  translations Json?
 
   @@map("banners")
 }
@@ -1818,6 +1833,20 @@ model Setting {
 
   @@index([group])
   @@map("settings")
+}
+
+/// One fixed window of one rate-limited action, for one subject.
+///
+/// The primary key carries the window, so incrementing is an upsert rather than
+/// a read-modify-write. See the migration for why. `SECURITY.md` section 9.
+model RateLimit {
+  /// `<action>:<subject>:<window start in seconds>`.
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("rate_limits")
 }
 
 model ShippingZone {

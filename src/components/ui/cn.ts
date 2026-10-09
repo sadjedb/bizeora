@@ -31,6 +31,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 
 /** Every font-size token in tokens.css, in scale order. */
 const FONT_SIZES = [
+  'display-3xl',
   'display-2xl',
   'display-xl',
   'display-lg',

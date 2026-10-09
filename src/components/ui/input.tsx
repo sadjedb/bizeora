@@ -1,9 +1,10 @@
 'use client';
 
-import { Checkbox, RadioGroup, Select, Switch } from 'radix-ui';
+import { Checkbox, Label, RadioGroup, Select, Switch } from 'radix-ui';
 import { Check, ChevronDown, Minus } from 'lucide-react';
 import {
   forwardRef,
+  useId,
   type ComponentPropsWithoutRef,
   type InputHTMLAttributes,
   type ReactNode,
@@ -269,9 +270,28 @@ export function CheckboxField({
   id,
   ...props
 }: CheckboxFieldProps) {
+  /*
+   * A Radix checkbox is a `<button role="checkbox">`, not an `<input>`, and
+   * that changes how it is named. `<label for>` only labels form-associated
+   * elements, so the plain label this used to render gave the control **no
+   * accessible name at all** — it announced as "checkbox" and could not be
+   * found by name by a screen reader or by a test. `Label` from Radix forwards
+   * its clicks to the control, and `aria-labelledby` is what actually names it.
+   */
+  const generated = useId();
+  const controlId = id ?? `${generated}-control`;
+  const labelId = `${generated}-label`;
+  const descriptionId = `${generated}-description`;
+
   return (
     <div className={cn('flex min-h-11 items-start gap-3 py-1.5', className)}>
-      <Checkbox.Root id={id} className={cn(CHOICE_BOX, 'rounded-sm')} {...props}>
+      <Checkbox.Root
+        id={controlId}
+        aria-labelledby={labelId}
+        aria-describedby={description ? descriptionId : undefined}
+        className={cn(CHOICE_BOX, 'rounded-sm')}
+        {...props}
+      >
         <Checkbox.Indicator className="text-fg-inverted">
           {props.checked === 'indeterminate' ? (
             <Minus className="size-3.5" aria-hidden="true" />
@@ -282,11 +302,17 @@ export function CheckboxField({
       </Checkbox.Root>
 
       <div className="flex flex-col gap-0.5">
-        <label htmlFor={id} className="text-body text-fg cursor-pointer">
+        <Label.Root
+          id={labelId}
+          htmlFor={controlId}
+          className="text-body text-fg cursor-pointer"
+        >
           {label}
-        </label>
+        </Label.Root>
         {description && (
-          <span className="text-body-sm text-fg-subtle">{description}</span>
+          <span id={descriptionId} className="text-body-sm text-fg-subtle">
+            {description}
+          </span>
         )}
       </div>
     </div>

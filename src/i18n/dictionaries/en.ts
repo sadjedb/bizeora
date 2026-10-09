@@ -138,6 +138,7 @@ export const en: Dictionary = {
     allProducts: 'All products',
     theAtelier: 'The atelier',
     madeToOrder: 'Made to order',
+    startOrder: 'Order now',
   },
 
   footer: {
@@ -161,6 +162,58 @@ export const en: Dictionary = {
     metaTitle: 'Shop',
     metaDescription:
       'Ready-to-wear embroidered pieces: t-shirts, sweatshirts, polos and accessories. Every piece can also be personalised.',
+
+    /* --- narrowing the catalogue (Phase 14.13) --- */
+
+    searchLabel: 'Search the shop',
+    searchPlaceholder: 'T-shirt, tote, embroidered…',
+    searchAction: 'Search',
+
+    filtersLabel: 'Filter the catalogue',
+    categoriesLabel: 'Filter by category',
+    allCategories: 'All',
+    filterCustomisable: 'Customisable',
+    filterInStock: 'In stock',
+    clearFilters: 'Clear all',
+    activeFilters: (n: number) => (n === 1 ? '1 filter on' : `${n} filters on`),
+
+    sortLabel: 'Sort by',
+    sortNewest: 'Newest',
+    sortPriceAsc: 'Price, low to high',
+    sortPriceDesc: 'Price, high to low',
+    sortName: 'Name (A–Z)',
+
+    countOf: (shown: number, total: number) =>
+      `${shown} of ${total} ${total === 1 ? 'piece' : 'pieces'}`,
+
+    noMatchTitle: 'Nothing matches that',
+    noMatchBody:
+      'Try fewer words, or drop a filter. The whole catalogue is one click away.',
+    noMatchAction: 'See the whole catalogue',
+
+    pagination: 'Pagination',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    goToPage: (n: number) => `Page ${n}`,
+    pageOf: (page: number, total: number) => `Page ${page} of ${total}`,
+
+    categoryEyebrow: 'Category',
+    categoryMetaTitle: (name: string) => `Embroidered ${name.toLowerCase()}`,
+    categoryNotFound: 'Category not found',
+    backToShop: 'The whole shop',
+  },
+
+  /* --- the 3D viewer (Phase 14.15) --- */
+  model: {
+    label: 'Rotatable 3D view of the garment',
+    hint: 'Drag to turn',
+    loading: 'Loading the model…',
+    failed:
+      'The 3D view will not run on this device. The photographs above show the same piece.',
+    missingMaterial: (material: string) =>
+      `The model has no material called “${material}”. Correct it in the workshop.`,
+    tabPhotos: 'Photos',
+    tab3d: '360° view',
   },
 
   product: {
@@ -619,6 +672,13 @@ export const en: Dictionary = {
     uploadingFile: (name: string) => `Uploading ${name}…`,
     noPreviewNote:
       'We cannot show a preview for this kind of file — the summary below shows exactly what we will make.',
+
+    stitchPreviewTitle: 'Embroidery preview',
+    stitchPreviewLead:
+      'This is what your design looks like stitched: thread reduces the colours, and every stitch catches the light. Your file is not changed.',
+    stitchPreviewStitched: 'Stitched',
+    stitchPreviewOriginal: 'Original file',
+    stitchPreviewToggle: 'Preview mode',
     embroideryTextLabel: 'Text to embroider',
     embroideryTextHint:
       'A first name, a team name, a date. Leave it empty if your design is a file.',
@@ -742,7 +802,7 @@ export const en: Dictionary = {
     amountsIn: (currency: string) => `Amounts in ${currency}, whole numbers.`,
     compareAtPrice: (currency: string) => `Compare-at price (${currency})`,
     noCategoryBody:
-      'A product belongs to a category and there is none. Category management is not built yet; the categories that exist come from the initial data set.',
+      'A product belongs to a category and there is none. Create one under Catalogue › Categories, then come back.',
     thresholdHint:
       'Below this number the variant shows as an alert. Empty: the default threshold.',
     ordersKeepSnapshot:
@@ -794,8 +854,10 @@ export const en: Dictionary = {
     fieldLimit: 'How many items are shown',
     fieldShowDelivery: 'Show the delivery zones',
     fieldPoints: 'Points',
+    fieldWords: 'Scrolling words (one per line)',
     fieldTitle: 'Title',
     fieldSubtitle: 'Subtitle',
+    fieldCare: 'Care',
     fieldBody: 'Text',
     fieldButton: 'Button',
     fieldDestination: 'Destination',
@@ -816,6 +878,7 @@ export const en: Dictionary = {
     moveDown: 'Move down',
     bandBanner: 'Banner',
     bandHero: 'Hero',
+    bandMarquee: 'Scrolling strip',
     bandHowItWorks: 'How it works',
     bandCategories: 'Categories',
     bandFeatured: 'Featured products',
@@ -920,6 +983,65 @@ export const en: Dictionary = {
     oneOrderLine: 'One order line',
     newProductLead: 'Create the record, then add its options, variants and stock.',
     noCategory: 'No category',
+
+    /* --- categories (Phase 14.13) --- */
+    /* --- 3D models (Phase 14.15) --- */
+    modelHeading: '3D model',
+    modelAdd: 'Add a model',
+    modelHint: (extension: string, megabytes: number) =>
+      `A self-contained .${extension} file, ${megabytes} MB at most. It is parsed before it is stored: a model that fetches an image from elsewhere is refused.`,
+    modelChooseMaterial:
+      'The file was read without being stored. Choose the material the embroidery goes on.',
+    modelMaterial: 'Embroidered material',
+    modelSuggested: 'suggested',
+    modelWidthMm: 'Real width (mm)',
+    modelUpload: 'Attach the model',
+    modelNone: 'No 3D model for this product.',
+    modelUnnamed: 'Unnamed model',
+    modelInactive: 'Inactive',
+    modelActivate: 'Activate',
+    modelDeactivate: 'Deactivate',
+    modelDelete: 'Delete the model',
+    modelTooLarge: (megabytes: number) => `The file is larger than ${megabytes} MB.`,
+
+    navCategories: 'Categories',
+    fieldCategoryName: 'Category name',
+
+    /* --- translations (Phase 14.14) --- */
+    translationHeading: 'English version',
+    translationFieldLabel: (label: string, language: string) => `${label} (${language})`,
+    translationProgress: (done: number, total: number) =>
+      total === 0 ? 'nothing to translate' : `${done} / ${total} translated`,
+    translationHint:
+      'The French text is shown under each field. Leave blank whatever you are not translating: an English visitor sees the French rather than a gap.',
+    translationNoSource: 'Nothing in French to translate here.',
+    translationTooLong: 'That is too long.',
+    translationUnknownField: 'This field cannot be translated.',
+    colTranslated: 'English',
+    categories: 'Categories',
+    categoriesLead:
+      'The shelves of the shop. Each category has its own page and its chip in the catalogue.',
+    newCategory: 'New category',
+    newCategoryLead:
+      'The name, the address and where it sits in the row. Products join it from their own page.',
+    editCategory: 'Edit category',
+    fieldSlug: 'Address (slug)',
+    fieldCategoryPosition: 'Position',
+    categoryPositionHint:
+      'The order of the chips in the catalogue. The smallest number comes first.',
+    fieldCategoryActive: 'Category visible',
+    categoryActiveHint:
+      'Unticked, it leaves the catalogue and its page returns an error. Not possible while it holds live products.',
+    categoryDescriptionHint:
+      'The text under the heading on the category page. Optional; two lines is plenty.',
+    createCategory: 'Create category',
+    colLiveProducts: 'Live',
+    categoryInactive: 'Hidden',
+    noCategoriesTitle: 'No categories',
+    noCategoriesBody:
+      'A product belongs to a category. Create one before adding products.',
+    categoryEmptyWarning: 'This category holds no live products.',
+    viewCategoryOnSite: 'View in the shop',
     saveRefused: 'Save refused',
     actionRefused: 'Action refused',
     fieldsetIdentity: 'Identity',
@@ -939,7 +1061,11 @@ export const en: Dictionary = {
     fieldMaterial: 'Material',
     fieldEmbroideryDetails: 'Embroidery details',
     fieldsetSeo: 'Search engines',
+    fieldSeoTitle: 'Title for search engines',
     fieldSeoDescription: 'Description for search engines',
+    seoBlankHint: 'Leave blank to reuse the name and the description.',
+    saveChanges: 'Save',
+    changesSaved: 'Changes saved',
     createProductThenVariants: 'The product is created, then you add its variants.',
     ordersUnchanged: 'Orders already placed are not changed.',
     createProduct: 'Create the product',

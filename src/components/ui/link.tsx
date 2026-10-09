@@ -52,6 +52,16 @@ export const linkVariants = cva(
         inline: 'text-accent underline underline-offset-4 hover:text-accent-hover',
         /** Navigation and UI. Underline appears on hover only. */
         subtle: 'text-fg-muted hover:text-fg underline-offset-4 hover:underline',
+        /**
+         * `subtle`, on an inverse band — the footer, a full-bleed dark section.
+         *
+         * It names the ground it sits on rather than the theme, exactly as
+         * `--color-fg-on-dark` does: an inverse band is light-on-dark in *both*
+         * themes (`tokens.css`), so a link on one cannot be `fg-muted` and
+         * cannot flip.
+         */
+        onDark:
+          'text-fg-on-dark-muted hover:text-fg-on-dark underline-offset-4 hover:underline',
         /** Wraps a card or an image. No text decoration of its own. */
         plain: 'text-inherit no-underline',
       },

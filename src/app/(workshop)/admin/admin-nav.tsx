@@ -6,6 +6,7 @@ import {
   Boxes,
   ClipboardList,
   FileText,
+  FolderTree,
   LayoutDashboard,
   LayoutTemplate,
   Menu,
@@ -78,6 +79,7 @@ export function navGroups(t: Dictionary): readonly Group[] {
       heading: t.admin.groupCatalogue,
       items: [
         { href: '/admin/products', label: t.admin.navProducts, icon: Package },
+        { href: '/admin/categories', label: t.admin.navCategories, icon: FolderTree },
         { href: '/admin/stock', label: t.admin.navStock, icon: Boxes },
       ],
     },

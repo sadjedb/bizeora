@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { DEFAULT_LOCALE } from '@/i18n/locales';
+import { localise } from '@/domain/translation';
+
 import { prisma } from '@/lib/db/client';
 import { toPublicAssetUrl } from '@/lib/media/public-asset';
 import {
@@ -97,6 +100,7 @@ export type PublicBanner = {
  */
 export async function listActiveBanners(
   now: Date = new Date(),
+  locale: string = DEFAULT_LOCALE,
 ): Promise<readonly PublicBanner[]> {
   const rows = await prisma.banner.findMany({
     where: { isActive: true },
@@ -109,17 +113,23 @@ export async function listActiveBanners(
       endsAt: true,
       isActive: true,
       position: true,
+      translations: true,
     },
     orderBy: [{ position: 'asc' }, { id: 'asc' }],
     take: 10,
   });
 
-  return activeBanners(rows satisfies readonly Banner[], now).map((banner) => ({
-    id: banner.id,
-    message: banner.message,
-    href: banner.href,
-    variant: banner.variant,
-  }));
+  return activeBanners(rows satisfies readonly Banner[], now).map((row) => {
+    const banner = rows.find((candidate) => candidate.id === row.id);
+    const text = localise(row, banner?.translations, locale, ['message']);
+
+    return {
+      id: row.id,
+      message: text.message,
+      href: row.href,
+      variant: row.variant,
+    };
+  });
 }
 
 /* ---------------------------------------------------------------------------
@@ -165,6 +175,7 @@ export type CategoryCard = {
  */
 export async function listCategoryCards(input: {
   limit: number;
+  locale?: string;
 }): Promise<readonly CategoryCard[]> {
   const rows = await prisma.category.findMany({
     where: { isActive: true, deletedAt: null, parentId: null },
@@ -172,6 +183,7 @@ export async function listCategoryCards(input: {
       slug: true,
       name: true,
       description: true,
+      translations: true,
       imageKey: true,
       _count: {
         select: {
@@ -185,19 +197,24 @@ export async function listCategoryCards(input: {
     take: Math.min(Math.max(input.limit, 1), 12),
   });
 
-  return rows.flatMap((row) =>
-    row._count.products === 0
-      ? []
-      : [
-          {
-            slug: row.slug,
-            name: row.name,
-            description: row.description,
-            image: toPublicAssetUrl(row.imageKey),
-            productCount: row._count.products,
-          },
-        ],
-  );
+  return rows.flatMap((row) => {
+    if (row._count.products === 0) return [];
+
+    const text = localise(row, row.translations, input.locale ?? DEFAULT_LOCALE, [
+      'name',
+      'description',
+    ]);
+
+    return [
+      {
+        slug: row.slug,
+        name: text.name,
+        description: text.description,
+        image: toPublicAssetUrl(row.imageKey),
+        productCount: row._count.products,
+      },
+    ];
+  });
 }
 
 /* ---------------------------------------------------------------------------

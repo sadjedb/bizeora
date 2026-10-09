@@ -8,6 +8,7 @@ import {
   type UploadAuthorisation,
 } from '@/server/services/design-file-service';
 import { ensureCartOwner, readCartOwner } from '@/server/cart/owner';
+import { throttle } from '@/server/security/throttle';
 
 /**
  * The builder's three upload entry points.
@@ -39,6 +40,22 @@ export async function requestUploadAction(input: {
   sizeBytes: number;
 }): Promise<UploadActionResult<UploadAuthorisation>> {
   const owner = await ensureCartOwner();
+
+  /*
+   * Storage exhaustion is the main cost risk in the application: an upload
+   * authorisation is permission to write an object, and nothing else in the
+   * system lets an anonymous caller consume money. Counted here rather than at
+   * `finaliseUpload`, because the authorisation is the thing being spent.
+   */
+  const allowed = await throttle({
+    action: 'uploadDesign',
+    // A guest has no account, so only the per-address limit applies to them —
+    // which is the tighter of the two, deliberately.
+    userId: owner.kind === 'user' ? owner.userId : null,
+  });
+
+  if (!allowed.ok) return { ok: false, message: allowed.message };
+
   const result = await authoriseUpload(owner, input);
 
   if (!result.ok) return { ok: false, message: result.error.message };

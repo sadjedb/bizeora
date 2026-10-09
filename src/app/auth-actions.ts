@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { registerCustomer, signInWithPassword, signOutCurrentSession } from '@/lib/auth';
+import { throttle } from '@/server/security/throttle';
 
 /**
  * Sign in, sign up, sign out.
@@ -63,6 +64,23 @@ export async function signInAction(raw: unknown): Promise<AuthActionResult> {
   const parsed = signInSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, message: MESSAGES.INVALID_INPUT };
 
+  /*
+   * Counted before the password is checked, and counted per address **and**
+   * per typed identifier (`SECURITY.md` section 9). Either alone is escapable:
+   * an attacker rotating e-mail addresses defeats the identifier limit, and an
+   * office behind one connection is punished by the address limit.
+   *
+   * The refusal says nothing about how many attempts remain and nothing about
+   * whether the account exists — the same sentence a wrong password gets, for
+   * the same reason.
+   */
+  const allowed = await throttle({
+    action: 'login',
+    identifier: parsed.data.email,
+  });
+
+  if (!allowed.ok) return { ok: false, message: allowed.message };
+
   const result = await signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
@@ -76,6 +94,12 @@ export async function signInAction(raw: unknown): Promise<AuthActionResult> {
 export async function registerAction(raw: unknown): Promise<AuthActionResult> {
   const parsed = registerSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, message: MESSAGES.INVALID_INPUT };
+
+  // Per address only: there is no identifier to count against yet, and
+  // three accounts an hour from one connection is generous for a real
+  // household and useless for a spammer.
+  const allowed = await throttle({ action: 'register' });
+  if (!allowed.ok) return { ok: false, message: allowed.message };
 
   const created = await registerCustomer({
     name: parsed.data.name,

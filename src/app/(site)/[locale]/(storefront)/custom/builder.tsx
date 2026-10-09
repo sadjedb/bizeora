@@ -40,6 +40,7 @@ import {
   type StepId,
 } from './builder-state';
 import { PlacementEditor } from './placement-editor';
+import { StitchPanel } from './stitch-panel';
 import {
   MAX_DESIGN_WIDTH_MM,
   MIN_DESIGN_WIDTH_MM,
@@ -99,6 +100,22 @@ export function Builder({
   const { t } = useDictionary();
   const [state, setState] = useState<BuilderState>(INITIAL_STATE);
   const [stepIndex, setStepIndex] = useState(0);
+
+  /*
+   * Whether the artwork is shown stitched, here and in the placement editor.
+   *
+   * Deliberately NOT in `BuilderState`: that object is the order being built,
+   * and it is what gets submitted. How the customer is currently looking at
+   * their own file is a property of this screen, and putting it in the state
+   * that crosses to the server would be sending the server a preference it has
+   * no use for and must not act on.
+   *
+   * It lives here rather than inside either consumer because the design step
+   * and the placement editor have to agree: a customer who switches to the
+   * original on one step and finds the other still stitched has been shown two
+   * answers to one question.
+   */
+  const [stitched, setStitched] = useState(true);
   const [rejections, setRejections] = useState<readonly FileRejection[]>([]);
   const [estimate, setEstimate] = useState<EstimateResult | null>(null);
   const [estimating, startEstimating] = useTransition();
@@ -496,6 +513,7 @@ export function Builder({
               <PlacementEditor
                 surfaces={product?.surfaces ?? []}
                 artwork={firstArtwork(state)}
+                stitched={stitched}
                 artworkAspect={artworkAspect}
                 sizes={reference.embroiderySizes}
                 surfaceImageId={state.surfaceImageId}
@@ -508,6 +526,8 @@ export function Builder({
           {step.id === 'design' && (
             <DesignStep
               state={state}
+              stitched={stitched}
+              onStitchedChange={setStitched}
               onChange={update}
               onFiles={addFiles}
               onRemoveFile={removeFile}
@@ -886,8 +906,12 @@ function DesignStep({
   onRemoveFile,
   onRetryFile,
   rejections,
+  stitched,
+  onStitchedChange,
 }: {
   state: BuilderState;
+  stitched: boolean;
+  onStitchedChange: (next: boolean) => void;
   onChange: (patch: Partial<BuilderState>) => void;
   onFiles: (files: File[]) => void;
   onRemoveFile: (localId: string) => void;
@@ -895,6 +919,16 @@ function DesignStep({
   rejections: readonly FileRejection[];
 }) {
   const { t } = useDictionary();
+
+  /*
+   * The first ready file a browser can actually draw. An SVG or a PDF has no
+   * preview (ADR-011), so there is nothing to stitch and the panel is absent
+   * rather than empty.
+   */
+  const artwork = state.files.find(
+    (file): file is AttachedFile & { previewUrl: string } =>
+      file.status === 'ready' && file.previewUrl !== null,
+  );
 
   return (
     <Stack gap={6}>
@@ -976,6 +1010,24 @@ function DesignStep({
             </Text>
           )}
         </Stack>
+      )}
+
+      {/*
+       * The stitched preview, for the first file a browser can draw.
+       *
+       * One panel rather than one per file: showing four of these turns the
+       * step into a gallery of the customer's own uploads, and the question it
+       * answers — "does my artwork suit thread?" — is answered by any one of
+       * them. The first is also the one the placement editor puts on the
+       * garment, so the two steps are showing the same thing.
+       */}
+      {artwork && (
+        <StitchPanel
+          src={artwork.previewUrl}
+          name={artwork.name}
+          stitched={stitched}
+          onStitchedChange={onStitchedChange}
+        />
       )}
 
       <Divider />

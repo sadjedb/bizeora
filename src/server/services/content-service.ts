@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { DEFAULT_LOCALE } from '@/i18n/locales';
+
 import { collectDataNeeds, listConfig, type HomepageSection } from '@/domain/content';
 import {
   listActiveBanners,
@@ -73,7 +75,19 @@ function limitFor(
   return limits.length === 0 ? fallback : Math.max(...limits);
 }
 
-export async function loadHomepage(now: Date = new Date()): Promise<HomepageData> {
+export async function loadHomepage(
+  now: Date = new Date(),
+  /*
+   * The language the bands' *contents* are read in.
+   *
+   * The bands' own copy is translated by `localiseSection` at render time, and
+   * has been since Phase 14.7. What could not be translated until Phase 14.14
+   * was everything those bands list — the product names in the featured strip,
+   * the category names in the grid, the gallery captions, the banner. Those
+   * come from the catalogue, so the language has to reach the query.
+   */
+  locale: string = DEFAULT_LOCALE,
+): Promise<HomepageData> {
   const sections = await listHomepageSections();
   const needs = collectDataNeeds(sections);
 
@@ -82,16 +96,19 @@ export async function loadHomepage(now: Date = new Date()): Promise<HomepageData
       needs.has('products')
         ? listPublishedProducts({
             limit: limitFor(sections, 'FEATURED_PRODUCTS', DEFAULT_PRODUCTS),
+            locale,
           })
         : [],
       needs.has('categories')
         ? listCategoryCards({
             limit: limitFor(sections, 'CATEGORY_GRID', DEFAULT_CATEGORIES),
+            locale,
           })
         : [],
       needs.has('gallery')
         ? listFeaturedGalleryItems({
             limit: limitFor(sections, 'GALLERY', DEFAULT_GALLERY),
+            locale,
           })
         : [],
       needs.has('reviews')
@@ -100,7 +117,7 @@ export async function loadHomepage(now: Date = new Date()): Promise<HomepageData
           })
         : [],
       needs.has('social') ? listSocialLinks() : [],
-      needs.has('banners') ? listActiveBanners(now) : [],
+      needs.has('banners') ? listActiveBanners(now, locale) : [],
       needs.has('delivery') ? listDeliveryZones() : [],
     ]);
 

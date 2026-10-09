@@ -29,6 +29,7 @@
  * hand-written here.
  */
 
+import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import sharp from 'sharp';
@@ -37,6 +38,11 @@ import dotenv from 'dotenv';
 import { Prisma, PrismaClient, SettingType } from '../src/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { HOMEPAGE_SECTIONS } from './homepage-sections';
+import {
+  DEMO_MODEL_KEY,
+  DEMO_MODEL_MATERIAL,
+  DEMO_MODEL_PRODUCT_SLUG,
+} from '../scripts/demo-model';
 
 dotenv.config({ path: ['.env.local', '.env'], quiet: true });
 
@@ -887,7 +893,120 @@ const DRAFT_PRODUCT: SeedProduct = {
   images: [],
 };
 
-async function seedCatalogue(): Promise<{ categories: number; products: number }> {
+/* ---------------------------------------------------------------------------
+ * English
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The catalogue's English overlay, keyed by slug.
+ *
+ * Separate from the product definitions above on purpose. French is the source
+ * of truth (ADR-040) and the English is a translation *of* it; keeping them in
+ * one object would invite the two to be edited as though they were equals, and
+ * the first thing to go would be the rule that a missing English field falls
+ * back to French rather than blanking it out.
+ *
+ * Deliberately **not exhaustive**. Two products carry a name and nothing else,
+ * because a half-translated catalogue is the normal state of one that is being
+ * translated, and it is the state the site has to render correctly. If every
+ * row here were complete, the fallback would never be exercised by anything but
+ * a test.
+ */
+const ENGLISH_CATEGORIES: Readonly<
+  Record<string, { name: string; description: string }>
+> = {
+  't-shirts': {
+    name: 'T-shirts',
+    description: 'Combed cotton, embroidered after making up.',
+  },
+  sweats: { name: 'Sweatshirts', description: 'Brushed fleece, lined hood.' },
+  polos: { name: 'Polo shirts', description: 'Cotton piqué, knitted collar.' },
+  accessoires: {
+    name: 'Accessories',
+    description: 'Caps, beanies and canvas bags.',
+  },
+};
+
+/**
+ * One row's overlay, in the shape the column holds.
+ *
+ * `Prisma.DbNull` rather than `Prisma.JsonNull`, and the distinction is not
+ * academic: a JSON column can hold SQL `NULL` *or* the JSON value `null`, and
+ * `JsonNull` writes the second. The check constraint on the column refuses it —
+ * `jsonb_typeof('null')` is `'null'`, not `'object'` — which is the constraint
+ * doing exactly what it was added for. An untranslated row has no overlay at
+ * all, which is `DbNull`.
+ */
+function englishOverlay(
+  english: Readonly<Record<string, string>> | undefined,
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return english === undefined ? Prisma.DbNull : { en: { ...english } };
+}
+
+type EnglishProduct = {
+  name: string;
+  subtitle?: string;
+  description?: string;
+  material?: string;
+  careInstructions?: string;
+  embroideryDetails?: string;
+};
+
+const ENGLISH_PRODUCTS: Readonly<Record<string, EnglishProduct>> = {
+  't-shirt-brode-classique': {
+    name: 'Classic embroidered t-shirt',
+    subtitle: 'Straight cut, chest embroidery',
+    description:
+      'Tightly knitted 180 gsm combed cotton, straight cut, ribbed collar reinforced with a taped seam. The embroidery is worked after making up, on the finished garment, which is what lets it be placed precisely.',
+    material: '100% combed cotton, 180 gsm',
+    careInstructions: 'Wash at 30°, inside out, do not tumble dry',
+    embroideryDetails:
+      'Left chest embroidery, high-tenacity polyester thread, up to 3 colours.',
+  },
+  'sweat-capuche-brode': {
+    name: 'Embroidered hooded sweatshirt',
+    subtitle: '320 gsm fleece',
+    description:
+      'Brushed 320 gsm fleece, jersey-lined hood, kangaroo pocket and elastane ribbing at the cuffs. The piece most often asked for in batches.',
+    material: '80% cotton, 20% polyester, 320 gsm',
+    careInstructions: 'Wash at 30°, inside out, do not tumble dry',
+    embroideryDetails: 'Chest or back embroidery, up to 15 cm wide.',
+  },
+  'polo-pique-brode': {
+    name: 'Embroidered piqué polo',
+    description:
+      '220 gsm cotton piqué, knitted collar and cuffs, three-button placket in mother-of-pearl. The garment of company orders, where embroidery replaces a printed logo.',
+    material: '100% piqué cotton, 220 gsm',
+    careInstructions: 'Wash at 30°, warm iron',
+    embroideryDetails: 'Left chest embroidery, logo up to 8 cm.',
+  },
+  'casquette-brodee': {
+    name: 'Embroidered cap',
+    description:
+      'Six-panel cap, pre-curved peak, adjustable metal fastening. One size, embroidered on the front panel.',
+    material: 'Cotton twill',
+    careInstructions: 'Clean by hand',
+    embroideryDetails: 'Front embroidery, 5 cm high at most.',
+  },
+  'tote-bag-toile-epaisse': {
+    name: 'Heavy canvas tote bag',
+    description:
+      '340 gsm cotton canvas, reinforced 70 cm handles, seams doubled at the stress points. Takes a monogram particularly well.',
+    material: '100% cotton, 340 gsm',
+    careInstructions: 'Wash at 30°',
+    embroideryDetails: 'Monogram or logo, centred, up to 20 cm.',
+  },
+  // Name only, deliberately: the fallback has to be exercised by the seeded
+  // catalogue and not only by a test fixture.
+  'bonnet-cotele-brode': { name: 'Embroidered ribbed beanie' },
+  'tablier-atelier-brode': { name: 'Embroidered workshop apron' },
+};
+
+async function seedCatalogue(): Promise<{
+  categories: number;
+  products: number;
+  models: number;
+}> {
   const categoryIdBySlug = new Map<string, string>();
 
   for (const category of CATEGORIES) {
@@ -904,6 +1023,7 @@ async function seedCatalogue(): Promise<{ categories: number; products: number }
             description: category.description,
             position: category.position,
             isActive: true,
+            translations: englishOverlay(ENGLISH_CATEGORIES[category.slug]),
           },
           select: { id: true },
         })
@@ -913,6 +1033,7 @@ async function seedCatalogue(): Promise<{ categories: number; products: number }
             name: category.name,
             description: category.description,
             position: category.position,
+            translations: englishOverlay(ENGLISH_CATEGORIES[category.slug]),
           },
           select: { id: true },
         });
@@ -928,6 +1049,7 @@ async function seedCatalogue(): Promise<{ categories: number; products: number }
 
     const base = {
       name: product.name,
+      translations: englishOverlay(ENGLISH_PRODUCTS[product.slug]),
       subtitle: product.subtitle ?? null,
       description: product.description,
       categoryId,
@@ -1096,7 +1218,53 @@ async function seedCatalogue(): Promise<{ categories: number; products: number }
     }
   }
 
-  return { categories: CATEGORIES.length, products: PRODUCTS.length + 1 };
+  const models = await seedDemoModel();
+
+  return { categories: CATEGORIES.length, products: PRODUCTS.length + 1, models };
+}
+
+/**
+ * The demo garment model, attached to the t-shirt.
+ *
+ * `scripts/make-demo-model.ts` writes the file; this points a row at it. Both
+ * halves are deliberate: the parser, the storage prefix and the texture
+ * transform all shipped in Phase 14.10 with nothing to exercise them, and a
+ * pipeline with no data in it is a pipeline nobody can tell is broken.
+ *
+ * It is **skipped when the file is not there**, so a checkout that has not run
+ * the generator seeds cleanly rather than advertising a model that 404s. And it
+ * is skipped when the product already has a model, for the same reason the
+ * photography is: the owner's real model must survive `npm run db:seed`.
+ */
+async function seedDemoModel(): Promise<number> {
+  const file = join(process.cwd(), 'public', 'assets', DEMO_MODEL_KEY);
+
+  if (!existsSync(file)) return 0;
+
+  const product = await prisma.product.findFirst({
+    where: { slug: DEMO_MODEL_PRODUCT_SLUG, deletedAt: null },
+    select: { id: true, models3d: { select: { id: true } } },
+  });
+
+  if (!product || product.models3d.length > 0) return 0;
+
+  await prisma.productModel3d.create({
+    data: {
+      productId: product.id,
+      storageKey: DEMO_MODEL_KEY,
+      byteSize: statSync(file).size,
+      materialName: DEMO_MODEL_MATERIAL,
+      /*
+       * The same measurement the photographs carry, so the millimetres the
+       * builder quotes do not change when the customer switches to the 3D
+       * view. ADR-035: the transform is shared; the scale has to be too.
+       */
+      surfaceWidthMm: 620,
+      label: 'Modèle de démonstration',
+    },
+  });
+
+  return 1;
 }
 
 /**
@@ -1694,7 +1862,8 @@ async function main(): Promise<void> {
   const catalogue = await seedCatalogue();
   console.info(
     `  categories       ${catalogue.categories}
-  products         ${catalogue.products} (demo, incl. 1 draft)`,
+  products         ${catalogue.products} (demo, incl. 1 draft)
+  3D models        ${catalogue.models}`,
   );
 
   const embroidery = await seedEmbroideryReference();

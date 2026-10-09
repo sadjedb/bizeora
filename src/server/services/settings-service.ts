@@ -111,13 +111,14 @@ const KEYS = [
  * all, and the running site disagreed with its own database indefinitely.
  *
  * Neither was buying anything, either, which is the part worth remembering. The
- * pages where a repeated query would actually cost something are the catalogue
- * and the front page, and those are not re-rendered per request at all: they
- * are prerendered and revalidated every five minutes, so the settings query
- * runs once per regeneration whatever this function does. On the pages that
- * *are* dynamic — the cart, the account, sign-in — four rows read on a primary
- * key is the cheapest query in the request. Caching it across requests bought
- * nothing and cost the one property the switch has to have.
+ * pages where a repeated query would actually cost something are the front page
+ * and the builder, and those are not re-rendered per request at all: they are
+ * prerendered and revalidated every five minutes, so the settings query runs
+ * once per regeneration whatever this function does. On the pages that *are*
+ * dynamic — the catalogue since Phase 14.13, the cart, the account, sign-in —
+ * four rows read on a primary key is the cheapest query in the request. Caching
+ * it across requests bought nothing and cost the one property the switch has to
+ * have.
  */
 export const siteSettings = cache(async (): Promise<SiteSettings> => buildSiteSettings());
 

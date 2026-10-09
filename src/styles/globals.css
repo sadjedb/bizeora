@@ -79,6 +79,55 @@
 }
 
 @layer utilities {
+  /*
+   * Scroll reveal — section 10's "16px rise plus fade, 420ms, once, only on
+   * marketing sections", driven by a **view timeline** rather than by script.
+   *
+   * Three guards, and each one is load-bearing:
+   *
+   *   `@supports`   where `animation-timeline` is unknown (Firefox, at the time
+   *                 of writing) no rule is emitted at all, so the element never
+   *                 receives `opacity: 0`. A decoration that hides content when
+   *                 its mechanism is missing is a bug, not a graceful one.
+   *   `@media`      the global reduced-motion block at the foot of this file
+   *                 shortens durations, which does nothing to a scroll-driven
+   *                 animation — its progress comes from the scroller, not from
+   *                 a clock. So the rule has to be withheld, not accelerated.
+   *   `both`        holds the first frame before the range begins and the last
+   *                 after it ends. Without it the element flicks back to
+   *                 invisible once it has scrolled past.
+   *
+   * The range is expressed in `entry`/`cover` rather than in pixels so it reads
+   * the same on a phone and on a 27-inch display: the element is fully arrived
+   * by the time it is a fifth of the way across the viewport.
+   */
+  @supports (animation-timeline: view()) {
+    /*
+     * `screen` as well as the two guards above. A printed page has no scroller,
+     * so a view timeline has no progress to report and every revealed band
+     * would print at its first keyframe — which is `opacity: 0`. Printing a
+     * blank page is the one failure this pattern can produce that the reader
+     * cannot work around by scrolling.
+     */
+    @media screen and (prefers-reduced-motion: no-preference) {
+      .reveal,
+      .reveal-far {
+        animation: stitch-reveal linear both;
+        animation-timeline: view();
+      }
+
+      .reveal {
+        animation-range: entry 0% cover 20%;
+      }
+
+      /* For a band that should hold its entrance a little longer — a
+       * full-bleed image, typically, where arriving too early wastes it. */
+      .reveal-far {
+        animation-range: entry 10% cover 38%;
+      }
+    }
+  }
+
   /* Skip link: visible only when focused. */
   .skip-link {
     position: absolute;

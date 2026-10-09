@@ -10,7 +10,10 @@ import { CheckboxField, Input, SelectField, Textarea } from '@/components/ui/inp
 import { Link } from '@/components/ui/link';
 import { Stack } from '@/components/layout/layout';
 import { Heading, Text } from '@/components/ui/typography';
+import { TranslationPanel } from '@/components/admin/translation-panel';
+import { translationFor } from '@/domain/translation';
 import { useDictionary } from '@/i18n/client';
+import { useToast } from '@/components/ui/toast';
 import {
   PRODUCT_STATUSES,
   PRODUCT_STATUS_HINTS,
@@ -64,6 +67,8 @@ export type ProductFormValues = {
   isBestSeller: boolean;
   seoTitle: string;
   seoDescription: string;
+  /** The overlay column as stored, so the English panel opens filled in. */
+  translations: unknown;
 };
 
 /**
@@ -162,6 +167,7 @@ export function ProductForm({
 }) {
   const { t } = useDictionary();
   const router = useRouter();
+  const toast = useToast();
   const [state, formAction, pending] = useActionState<ProductFormState, FormData>(
     saveProductAction,
     EMPTY_PRODUCT_FORM_STATE,
@@ -182,8 +188,26 @@ export function ProductForm({
   useEffect(() => {
     if (creating && state.savedId) router.push(`/admin/products/${state.savedId}`);
   }, [creating, router, state.savedId]);
+  /*
+   * Say so, and show it.
+   *
+   * Creating navigates, which is its own confirmation. Editing did not: the
+   * form posted, the server wrote, and nothing on the screen changed — so the
+   * only way to know a save had worked was to reload. The toast is the
+   * feedback and `router.refresh()` is what makes the page agree with the
+   * database, which matters most for the English panel, whose progress count
+   * is read from the row.
+   */
+  useEffect(() => {
+    if (creating || state.savedAt === undefined) return;
+
+    toast({ tone: 'success', title: t.admin.changesSaved });
+    router.refresh();
+  }, [creating, router, state.savedAt, t.admin.changesSaved, toast]);
 
   const errors = state.errors;
+  const english = translationFor(values.translations, 'en');
+  const translationErrors = state.translationErrors ?? {};
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -374,7 +398,7 @@ export function ProductForm({
           )}
         </FormField>
 
-        <FormField label="Entretien" error={errors.careInstructions} optional>
+        <FormField label={t.admin.fieldCare} error={errors.careInstructions} optional>
           {(field) => (
             <Textarea
               {...field}
@@ -431,6 +455,73 @@ export function ProductForm({
           )}
         </FormField>
       </Fieldset>
+
+      <TranslationPanel
+        locale="en"
+        errors={translationErrors}
+        defaultOpen={Object.keys(translationErrors).length > 0}
+        fields={[
+          {
+            field: 'name',
+            label: t.admin.fieldProductName,
+            source: name,
+            value: english.name ?? '',
+            maxLength: 120,
+          },
+          {
+            field: 'subtitle',
+            label: t.admin.fieldSubtitle,
+            source: values.subtitle,
+            value: english.subtitle ?? '',
+            maxLength: 160,
+          },
+          {
+            field: 'description',
+            label: t.admin.fieldDescription,
+            source: values.description,
+            value: english.description ?? '',
+            multiline: true,
+            maxLength: 4000,
+          },
+          {
+            field: 'material',
+            label: t.admin.fieldMaterial,
+            source: values.material,
+            value: english.material ?? '',
+            maxLength: 2000,
+          },
+          {
+            field: 'careInstructions',
+            label: t.admin.fieldCare,
+            source: values.careInstructions,
+            value: english.careInstructions ?? '',
+            maxLength: 2000,
+          },
+          {
+            field: 'embroideryDetails',
+            label: t.admin.fieldEmbroideryDetails,
+            source: values.embroideryDetails,
+            value: english.embroideryDetails ?? '',
+            multiline: true,
+            maxLength: 2000,
+          },
+          {
+            field: 'seoTitle',
+            label: t.admin.fieldSeoTitle,
+            source: values.seoTitle,
+            value: english.seoTitle ?? '',
+            maxLength: 120,
+          },
+          {
+            field: 'seoDescription',
+            label: t.admin.fieldSeoDescription,
+            source: values.seoDescription,
+            value: english.seoDescription ?? '',
+            multiline: true,
+            maxLength: 320,
+          },
+        ]}
+      />
 
       <div className="border-border bg-surface sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border p-4">
         <Text variant="caption" tone="subtle">

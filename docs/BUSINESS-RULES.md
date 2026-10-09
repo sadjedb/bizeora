@@ -869,6 +869,39 @@ The mitigation is the claim flow, not a policy change: the order confirmation an
 order-tracking page both offer "create an account to review this order", pre-filled from the
 order. The path from guest purchase to review exists; it passes through authentication.
 
+11.9 **A category with live products may not be hidden.** Switching `is_active`
+off takes a category out of the chip row and makes `/shop/c/<slug>` a 404, while
+the products inside it keep their own pages and keep selling — a shelf nobody can
+reach that is still being stocked. The predicate is `mayDeactivateCategory` and
+the count is taken against the database at save time, not from the figure the
+form was rendered with. Unpublishing or moving the products first is the way
+through, and it is a decision somebody makes on purpose. See ADR-039.
+
+11.10 **A renamed category leaves no redirect**, unlike a renamed product
+(11.6). A product URL is what a customer is sent and what a search engine ranks;
+a category listing is navigation, reachable from every catalogue page, so the old
+address simply 404s. Renaming one is cheap and rare; a second redirect table for
+it would be machinery for a URL nobody bookmarks.
+
+11.12 **The catalogue is translated by an overlay, and an untranslated field reads in French.**
+`products`, `categories`, `gallery_items` and `banners` each carry a `translations` column holding
+`{"<locale>": {"<column>": "…"}}`. French lives in the row's own columns and is the source of
+truth; the overlay supplies what it has, **field by field**, so a product with an English name and
+no English description is correct rather than half-blank. A blank overlay field means "not
+translated" on the way in and on the way out — there is no way to translate something to nothing.
+Which fields may be translated is a closed list in `domain/translation`, because the overlay is
+written by a form and merging it wholesale would be a way to set a price. See ADR-040.
+
+11.13 **Translation changes what a row says, never which rows there are.** Visibility, pricing,
+availability and ordering are computed from the French columns in both languages. A search made in
+English also matches the English name; a draft with an English overlay is still a draft.
+
+11.11 **A narrowed catalogue is a view, not a page.** `/shop` and each
+`/shop/c/<slug>` are indexable; a search, an order or a page number is
+`noindex, follow` and canonicalises to the listing it narrows. Filtering,
+ordering and pagination all happen in the query, so the count shown beside the
+filters is the count the database returned. See ADR-039.
+
 ---
 
 ## 12. Permissions
@@ -912,6 +945,7 @@ is one click. It is a staff capability precisely because it is reversible. A pro
 through its own status instead, and a **published** product may not be archived from a bulk
 selection — unpublishing has a customer-visible effect and stays on the product's screen. At most
 100 rows move per act, and each batch writes one audit entry. See ADR-034.
+
 
 12.7 **Two settings change what everybody may do, and both are admin-only.**
 

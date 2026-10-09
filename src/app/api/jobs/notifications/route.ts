@@ -1,5 +1,6 @@
 import { runNotificationSweep } from '@/server/services/notification-service';
 import { serverEnv } from '@/lib/env';
+import { sweepRateLimits } from '@/lib/rate-limit';
 
 /**
  * The scheduler's one door.
@@ -63,7 +64,17 @@ export async function POST(request: Request): Promise<Response> {
 
   const summary = await runNotificationSweep();
 
+  /*
+   * And a sweep of the rate-limit table, on the same tick.
+   *
+   * Its rows are dead the moment their window closes, and a delete that takes
+   * milliseconds does not deserve a cron entry of its own — a second scheduled
+   * job is a second thing to configure, monitor and forget. It runs after the
+   * notifications so a failure here cannot cost a delivery.
+   */
+  const expired = await sweepRateLimits().catch(() => 0);
+
   // A summary, not a list: the response goes into a scheduler's log, and the
   // recipients and subjects of what was just delivered do not belong there.
-  return Response.json({ ok: true, ...summary });
+  return Response.json({ ok: true, ...summary, rateLimitsSwept: expired });
 }

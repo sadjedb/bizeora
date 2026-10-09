@@ -15,6 +15,19 @@ import { Overline, Text } from '@/components/ui/typography';
  * A footer link to a page that does not exist yet is a 404 with extra steps, so
  * the storefront passes only routes that are real. The documented four-column
  * IA fills in as those pages land.
+ *
+ * ## Phase 16: it is the end of the page, and it looks like one
+ *
+ * It was a tinted band with a hairline above it, which is the shape of a footer
+ * that is apologising for existing. It is now a full-bleed inverse band with
+ * rounded top corners and the mark set at display size — the page closes on the
+ * brand rather than trailing off into small print.
+ *
+ * Everything on it uses the `*-on-dark` roles rather than `fg-muted`, because
+ * `bg-inverse` is the one surface in the system that does not flip with the
+ * theme (`tokens.css`): it is light-on-dark in *both*. A `fg-muted` link here
+ * would be correct in the dark theme and invisible in the light one, which is
+ * the failure that is hardest to notice — you have to switch themes to see it.
  */
 
 export type FooterLink = { label: string; href: string };
@@ -50,11 +63,14 @@ export function Footer({
 
   return (
     <footer
-      className={cn('border-border bg-bg-subtle mt-24 border-t lg:mt-40', className)}
+      className={cn(
+        'bg-bg-inverse text-fg-on-dark mt-24 rounded-t-2xl lg:mt-40',
+        className,
+      )}
     >
       <Container>
-        <div className="grid gap-10 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] lg:py-20">
-          <div className="flex max-w-xs flex-col gap-4">
+        <div className="grid gap-12 py-16 md:grid-cols-[1.5fr_repeat(3,1fr)] lg:py-24">
+          <div className="flex max-w-xs flex-col gap-5">
             {/*
              * The mark, on its own light chip.
              *
@@ -64,7 +80,7 @@ export function Footer({
              * broken image, and inverting somebody's logo is not ours to do.
              * A transparent SVG would let this become a plain `img`.
              */}
-            <span className="inline-flex w-fit items-center gap-3 rounded-md bg-white p-2">
+            <span className="inline-flex w-fit items-center gap-3 rounded-lg bg-white p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={brand.logo.src ?? ''}
@@ -75,17 +91,26 @@ export function Footer({
               />
             </span>
 
-            <span className="font-display text-heading-lg tracking-tight">
+            {/*
+             * The mark set large. This is the only place on the site the brand
+             * name appears at display size with nothing competing with it, and
+             * it is the last thing on every page — which is the whole argument
+             * for the inverse band above it.
+             */}
+            <span className="font-display text-display-lg leading-none tracking-tight [font-variation-settings:'SOFT'_60]">
               {brand.name}
             </span>
-            <Text variant="body-sm" tone="muted">
+
+            <Text variant="body-sm" className="text-fg-on-dark-muted">
               {brand.tagline}
             </Text>
           </div>
 
           {columns.map((column) => (
             <nav key={column.heading} aria-label={column.heading}>
-              <Overline as="h2">{column.heading}</Overline>
+              <Overline as="h2" className="text-fg-on-dark-muted">
+                {column.heading}
+              </Overline>
               {/* 44px rows rather than 16px text links. A stacked list of
                * footer links is one of the fiddliest things to tap on a phone,
                * and mobile is the primary platform (section 13). */}
@@ -94,7 +119,7 @@ export function Footer({
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      variant="subtle"
+                      variant="onDark"
                       className="text-body-sm flex min-h-11 items-center"
                     >
                       {link.label}
@@ -107,20 +132,20 @@ export function Footer({
         </div>
 
         {contactLines.length > 0 && (
-          <div className="border-border flex flex-col gap-2 border-t py-8 md:flex-row md:flex-wrap md:gap-x-8">
+          <div className="border-border-on-dark flex flex-col gap-2 border-t py-8 md:flex-row md:flex-wrap md:gap-x-8">
             {contactLines.map((line) => (
-              <Text key={line} variant="body-sm" tone="subtle">
+              <Text key={line} variant="body-sm" className="text-fg-on-dark-muted">
                 {line}
               </Text>
             ))}
           </div>
         )}
 
-        <div className="border-border flex flex-col gap-2 border-t py-8 md:flex-row md:items-center md:justify-between">
-          <Text variant="caption" tone="subtle">
+        <div className="border-border-on-dark flex flex-col gap-2 border-t py-8 md:flex-row md:items-center md:justify-between">
+          <Text variant="caption" className="text-fg-on-dark-muted">
             © {year} {brand.legalName}
           </Text>
-          <Text variant="caption" tone="subtle">
+          <Text variant="caption" className="text-fg-on-dark-muted">
             {madeIn}
           </Text>
         </div>

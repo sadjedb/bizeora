@@ -154,6 +154,7 @@ test.describe('the settings screen', () => {
     await page.getByLabel('Mot de passe').fill(PASSWORD);
     await page.getByRole('button', { name: 'Créer mon compte' }).click();
     await page.waitForURL(/\/account|\/admin/);
+    await settle(page);
 
     await withDatabase((client) =>
       client.query(`UPDATE "users" SET "role" = 'STAFF' WHERE "email" = $1`, [email]),
@@ -165,6 +166,17 @@ test.describe('the settings screen', () => {
     await page.getByLabel('Mot de passe').fill(PASSWORD);
     await page.getByRole('button', { name: 'Se connecter' }).click();
     await page.waitForURL(/\/account|\/admin/);
+
+    /*
+     * Let the sign-in navigation finish before starting another.
+     *
+     * `waitForURL` resolves the moment the address matches, which is before the
+     * client-side navigation it belongs to has settled — and a `goto` issued in
+     * that window aborts it (`net::ERR_ABORTED`). The race has always existed;
+     * it only started losing once Phase 15 made every page render per request
+     * and widened the window.
+     */
+    await settle(page);
 
     await page.goto('/admin/settings');
 

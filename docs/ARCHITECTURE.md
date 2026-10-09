@@ -169,9 +169,9 @@ page.
 | Route class                           | Strategy                                                                 | Reason                                             |
 | ------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
 | Home, About, How It Works, FAQ, legal | Static, revalidated on content change via tag                            | Content changes rarely; must be fast and indexable |
-| Category and collection listings      | Static with tag revalidation; dynamic when filters are applied           | SEO surface                                        |
+| Category listings (`/shop/c/…`)       | Dynamic, server-rendered                                                 | Carries the same search and filters as `/shop`     |
 | Product detail                        | Static with tag revalidation; live stock streamed in a suspense boundary | Fast first paint, accurate stock                   |
-| Shop with search or filters           | Dynamic, server-rendered                                                 | Query-dependent                                    |
+| Catalogue (`/shop`)                   | Dynamic, server-rendered                                                 | Reads `searchParams` since Phase 14.13 (ADR-039)   |
 | Cart, checkout                        | Dynamic, never cached                                                    | Per-user                                           |
 | Account, admin                        | Dynamic, never cached, `no-store`                                        | Private                                            |
 | Gallery                               | Static with tag revalidation                                             |                                                    |
@@ -205,6 +205,22 @@ So there are exactly two correct forms:
 
 `revalidatePath('/fr', 'layout')` is the trap: it looks like the concrete form, produces
 `_N_T_/fr/layout`, and matches nothing. See ADR-038.
+
+### Where content is translated
+
+Two mechanisms, one rule: **the language reaches the data, and the data comes back translated.**
+
+- **Interface copy** — every word the developers write — lives in `i18n/dictionaries`. A storefront
+  server component reads `params.locale`, an admin one calls `workshopDictionary()`, a client one
+  calls `useDictionary()` (ADR-030, ADR-033).
+- **Content the business writes** — product names, category names, gallery captions, the banner,
+  the homepage's bands — lives in the database with an English overlay beside it, and is merged
+  **at the repository boundary** by `localise` (ADR-040). Every storefront read takes a locale;
+  pages pass theirs and receive DTOs that are already in the right language.
+
+The boundary is the point. A page that translated its own data would be a page that could forget
+to, and the failure — a French name on an English screen — is invisible to anybody testing in
+French.
 
 Revalidation is **tag-based**, never blind time-based. Publishing a product revalidates
 `product:<slug>`, `category:<slug>`, `products:list` and `home`. This is a service responsibility,

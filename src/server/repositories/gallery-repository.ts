@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { DEFAULT_LOCALE } from '@/i18n/locales';
+import { localise } from '@/domain/translation';
+
 import { prisma } from '@/lib/db/client';
 import { toPublicAssetUrl } from '@/lib/media/public-asset';
 import type { GalleryFilters } from '@/domain/gallery';
@@ -46,6 +49,7 @@ const CARD_SELECT = {
   slug: true,
   title: true,
   alt: true,
+  translations: true,
   imageKey: true,
   thumbnailKey: true,
   productType: true,
@@ -60,20 +64,29 @@ export function publiclyVisibleGalleryWhere() {
 
 export const GALLERY_PAGE_SIZE = 24;
 
-function toCard(row: {
-  slug: string;
-  title: string;
-  alt: string;
-  imageKey: string;
-  thumbnailKey: string | null;
-  productType: string | null;
-  embroideryType: string | null;
-  isFeatured: boolean;
-}): GalleryCard {
+function toCard(
+  row: {
+    slug: string;
+    title: string;
+    alt: string;
+    imageKey: string;
+    thumbnailKey: string | null;
+    productType: string | null;
+    embroideryType: string | null;
+    isFeatured: boolean;
+    translations?: unknown;
+  },
+  locale: string = DEFAULT_LOCALE,
+): GalleryCard {
+  // The caption and the alt text, in the reader's language. The facets are not
+  // translated: they are filter values shared with the URL, and translating one
+  // would break the link that carries it.
+  const text = localise(row, row.translations, locale, ['title', 'alt']);
+
   return {
     slug: row.slug,
-    title: row.title,
-    alt: row.alt,
+    title: text.title,
+    alt: text.alt,
     image: toPublicAssetUrl(row.imageKey),
     thumbnail: toPublicAssetUrl(row.thumbnailKey ?? row.imageKey),
     productType: row.productType,
@@ -83,7 +96,7 @@ function toCard(row: {
 }
 
 export async function listGalleryItems(
-  input: { filters?: GalleryFilters; limit?: number } = {},
+  input: { filters?: GalleryFilters; limit?: number; locale?: string } = {},
 ): Promise<readonly GalleryCard[]> {
   const filters = input.filters;
 
@@ -99,12 +112,13 @@ export async function listGalleryItems(
     take: Math.min(input.limit ?? GALLERY_PAGE_SIZE, GALLERY_PAGE_SIZE),
   });
 
-  return rows.map(toCard);
+  return rows.map((row) => toCard(row, input.locale));
 }
 
 /** Featured items, for the homepage band. */
 export async function listFeaturedGalleryItems(input: {
   limit: number;
+  locale?: string;
 }): Promise<readonly GalleryCard[]> {
   const rows = await prisma.galleryItem.findMany({
     where: { ...publiclyVisibleGalleryWhere(), isFeatured: true },
@@ -113,10 +127,13 @@ export async function listFeaturedGalleryItems(input: {
     take: Math.min(Math.max(input.limit, 1), 12),
   });
 
-  return rows.map(toCard);
+  return rows.map((row) => toCard(row, input.locale));
 }
 
-export async function getGalleryItemBySlug(slug: string): Promise<GalleryDetail | null> {
+export async function getGalleryItemBySlug(
+  slug: string,
+  locale: string = DEFAULT_LOCALE,
+): Promise<GalleryDetail | null> {
   const row = await prisma.galleryItem.findFirst({
     where: { slug, ...publiclyVisibleGalleryWhere() },
     select: {
@@ -128,9 +145,11 @@ export async function getGalleryItemBySlug(slug: string): Promise<GalleryDetail 
 
   if (!row) return null;
 
+  const text = localise(row, row.translations, locale, ['description']);
+
   return {
-    ...toCard(row),
-    description: row.description,
+    ...toCard(row, locale),
+    description: text.description,
     tags: row.tags.map((link) => link.tag.name),
   };
 }

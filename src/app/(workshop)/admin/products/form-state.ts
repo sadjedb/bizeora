@@ -15,8 +15,18 @@ import type {
 
 export type ProductFormState = {
   errors: ProductFormErrors;
+  /** Keyed by translated field, so the English panel marks its own boxes. */
+  translationErrors?: Record<string, string>;
   /** Set on success so the client can navigate to the saved product. */
   savedId?: string;
+  /*
+   * A new value on every successful save.
+   *
+   * `savedId` is the same string each time, so an effect watching it fires
+   * once and never again — which is why editing a record twice used to give
+   * feedback only the first time. This changes, so each save is its own event.
+   */
+  savedAt?: number;
 };
 
 export const EMPTY_PRODUCT_FORM_STATE: ProductFormState = { errors: {} };

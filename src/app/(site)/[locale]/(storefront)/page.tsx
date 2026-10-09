@@ -63,7 +63,10 @@ export default async function HomePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale, t } = dictionaryFor((await params).locale);
-  const [data, { brandName }] = await Promise.all([loadHomepage(), siteSettings()]);
+  const [data, { brandName }] = await Promise.all([
+    loadHomepage(new Date(), locale),
+    siteSettings(),
+  ]);
 
   return (
     <>
@@ -96,9 +99,11 @@ export default async function HomePage({
       {/*
        * The bands' own copy is translated by an overlay inside each row's
        * `config` (`localiseSection`, ADR-030) — what the shop writes about
-       * itself is content, and content lives in the database. What it cannot
-       * translate is the catalogue those bands list: product names and gallery
-       * captions are single-language rows and read in French either way.
+       * itself is content, and content lives in the database. Since Phase
+       * 14.14 the same is true of what those bands *list*: `loadHomepage`
+       * carries the locale into the catalogue queries, so product names,
+       * category names, gallery captions and the banner are translated too
+       * (ADR-040).
        */}
       {data.sections.map((section) => (
         <HomepageBand

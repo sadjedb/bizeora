@@ -183,6 +183,21 @@ const serverSchema = z.object({
    */
   EMAIL_TRANSPORT: z.enum(['auto', 'console']).optional(),
 
+  /**
+   * Rate limiting, off.
+   *
+   * The same escape hatch as `EMAIL_TRANSPORT`, for the same reason and with
+   * the same shape. The end-to-end suite registers dozens of accounts from one
+   * address in a few minutes, which is exactly the traffic
+   * `LIMITS.register` exists to refuse — so the suite turns the limiter off
+   * rather than the limits being loosened to accommodate a test.
+   *
+   * Unset everywhere else, which is `on`. Setting it in a real deployment
+   * removes every limit in `SECURITY.md` section 9, so the limiter says so in
+   * the log the first time it is asked.
+   */
+  RATE_LIMIT: z.enum(['on', 'off']).optional(),
+
   /** The envelope sender, e.g. `Bizeora <commandes@example.dz>`. */
   EMAIL_FROM: z.string().min(1).optional(),
 

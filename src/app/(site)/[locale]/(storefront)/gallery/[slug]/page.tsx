@@ -40,7 +40,7 @@ export const revalidate = 300;
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug, locale: rawLocale } = await params;
   const { locale, t } = dictionaryFor(rawLocale);
-  const item = await getGalleryItemBySlug(slug);
+  const item = await getGalleryItemBySlug(slug, locale);
 
   // Unknown, unpublished or soft-deleted are the same answer, and it carries no
   // canonical: an item awaiting a customer's consent (13.6) must not be
@@ -62,7 +62,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function GalleryItemPage({ params }: PageProps) {
   const { slug, locale: rawLocale } = await params;
   const { locale, t } = dictionaryFor(rawLocale);
-  const item = await getGalleryItemBySlug(slug);
+  const item = await getGalleryItemBySlug(slug, locale);
 
   if (!item) notFound();
 

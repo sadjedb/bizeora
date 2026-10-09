@@ -35,6 +35,10 @@ export async function SiteShell({
       columns={footerColumns(t)}
       contact={footerContact(t)}
       footerMadeIn={t.footer.madeIn}
+      // The one filled control in the header. It points at the builder, which
+      // is the destination the business earns the most from and the one a
+      // first-time visitor is least likely to find on their own.
+      cta={{ label: t.nav.startOrder, href: '/custom' }}
       labels={{
         mainNavigation: t.a11y.mainNavigation,
         openMenu: t.a11y.openMenu,

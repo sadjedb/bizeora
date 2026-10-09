@@ -85,12 +85,22 @@ export function FilterLink({
   href,
   current,
   count,
+  shape = 'tight',
   children,
 }: {
   href: string;
   current: boolean;
   /** Shown as a trailing figure. Omit rather than render a zero nobody needs. */
   count?: number;
+  /**
+   * `tight` in the workshop, `pill` on the storefront — ADR-042.
+   *
+   * This primitive is rendered by both halves of the product, which is exactly
+   * the case that ADR names as the cost of splitting the radius scale: a shared
+   * component has to be told which side it is on. The default is the
+   * conservative one, so every admin list was unchanged when this was added.
+   */
+  shape?: 'tight' | 'pill';
   children: ReactNode;
 }) {
   return (
@@ -100,10 +110,13 @@ export function FilterLink({
         variant="plain"
         aria-current={current ? 'page' : undefined}
         className={cn(
-          'text-body-sm flex min-h-9 items-center gap-2 rounded-md px-3 whitespace-nowrap',
+          'text-body-sm flex items-center gap-2 whitespace-nowrap',
           'duration-fast transition-colors ease-out motion-reduce:transition-none',
+          shape === 'pill'
+            ? 'border-hairline min-h-10 rounded-full border px-4'
+            : 'min-h-9 rounded-md px-3',
           current
-            ? 'bg-fg text-fg-inverted font-medium'
+            ? 'bg-fg text-fg-inverted border-fg font-medium'
             : 'text-fg-muted hover:bg-bg-sunken hover:text-fg',
         )}
       >

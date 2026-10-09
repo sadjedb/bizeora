@@ -38,6 +38,7 @@ const LIMIT: ConfigField = { name: 'limit', kind: 'count', max: MAX_SECTION_ITEM
  */
 export const SECTION_FIELDS: Record<HomepageSectionType, readonly ConfigField[]> = {
   BANNER: [],
+  MARQUEE: [{ name: 'words', kind: 'longText' }],
   HERO: [
     EYEBROW,
     { name: 'note', kind: 'text' },
@@ -71,6 +72,7 @@ export const SECTION_FIELDS: Record<HomepageSectionType, readonly ConfigField[]>
  */
 export const SECTION_HAS_CTA: Record<HomepageSectionType, boolean> = {
   BANNER: false,
+  MARQUEE: false,
   HERO: true,
   HOW_IT_WORKS: false,
   CATEGORY_GRID: true,

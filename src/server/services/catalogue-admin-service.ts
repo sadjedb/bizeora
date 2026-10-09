@@ -1,13 +1,18 @@
 import 'server-only';
 
 import {
+  CATEGORY_IN_USE_REFUSAL,
   hasErrors,
+  mayDeactivateCategory,
   normaliseSku,
   resultingQuantity,
+  validateCategoryDraft,
   validateProductDraft,
   validateStockAdjustment,
   validateVariantDraft,
   type AdjustmentReason,
+  type CategoryDraft,
+  type CategoryDraftField,
   type FieldErrors,
   type ProductDraft,
   type ProductDraftField,
@@ -17,16 +22,30 @@ import {
 } from '@/domain/catalogue';
 import {
   adjustStock,
+  countLiveProductsInCategory,
+  getCategoryTranslations,
+  getProductTranslations,
+  translationWrite,
+  createCategory,
   createOption,
   createProduct,
   createVariant,
   getVariantForAdjustment,
   setProductStatus,
+  updateCategory,
   updateProduct,
   updateVariant,
   type AdjustmentApplied,
+  type SavedCategoryRow,
   type WriteFailure,
 } from '@/server/repositories/catalogue-admin-repository';
+import {
+  TRANSLATABLE_FIELDS,
+  mergeTranslation,
+  validateTranslation,
+  type TranslatableKind,
+  type TranslationRefusal,
+} from '@/domain/translation';
 
 /**
  * Catalogue and stock, as use cases.
@@ -90,11 +109,42 @@ export async function saveProduct(input: {
   /** `null` creates; an id updates. */
   productId: string | null;
   draft: ProductDraft;
+  /** One locale's overlay, as submitted. Absent leaves the column alone. */
+  translation?: { locale: string; values: Readonly<Record<string, string>> };
 }): Promise<
-  { ok: true; value: SavedProduct } | { ok: false; errors: ProductFormErrors }
+  | { ok: true; value: SavedProduct }
+  | {
+      ok: false;
+      errors: ProductFormErrors;
+      translationErrors?: TranslationFormErrors;
+    }
 > {
   const errors = validateProductDraft(input.draft);
   if (hasErrors(errors)) return { ok: false, errors };
+
+  /*
+   * The overlay is merged against what is stored, not against what the form
+   * remembered. Two people editing the same product in two languages would
+   * otherwise each save the other's work away.
+   */
+  let translations: ReturnType<typeof translationWrite> | undefined;
+
+  if (input.translation) {
+    const existing = input.productId
+      ? await getProductTranslations(input.productId)
+      : null;
+
+    const prepared = prepareTranslation({
+      existing,
+      locale: input.translation.locale,
+      kind: 'product',
+      values: input.translation.values,
+    });
+
+    if (!prepared.ok)
+      return { ok: false, errors: {}, translationErrors: prepared.errors };
+    translations = translationWrite(prepared.value);
+  }
 
   const write = {
     name: input.draft.name.trim(),
@@ -115,6 +165,7 @@ export async function saveProduct(input: {
     isBestSeller: input.draft.isBestSeller,
     seoTitle: input.draft.seoTitle,
     seoDescription: input.draft.seoDescription,
+    ...(translations === undefined ? {} : { translations }),
   };
 
   const result =
@@ -314,4 +365,176 @@ export async function applyStockAdjustment(input: {
 /** What the form previews while the operator types. Pure; no I/O. */
 export function previewQuantity(current: number, delta: number): number {
   return resultingQuantity(current, delta);
+}
+
+/* ---------------------------------------------------------------------------
+ * Categories
+ * ------------------------------------------------------------------------ */
+
+export type CategoryFormErrors = FieldErrors<CategoryDraftField>;
+
+/**
+ * Create or update a category.
+ *
+ * Two rules the payload cannot answer on its own, in the order they can fail:
+ *
+ *   1. **A category with live products may not be switched off** — see
+ *      `mayDeactivateCategory` for why that is a rule rather than a warning.
+ *      The count is taken here, against the database, rather than trusted from
+ *      the form, which shows a stale figure the moment somebody else publishes
+ *      something.
+ *   2. **The slug has to be free**, which is the partial unique index's answer,
+ *      not ours.
+ */
+export async function saveCategory(input: {
+  /** `null` creates; an id updates. */
+  categoryId: string | null;
+  draft: CategoryDraft;
+  /** One locale's overlay, as submitted. Absent leaves the column alone. */
+  translation?: { locale: string; values: Readonly<Record<string, string>> };
+}): Promise<
+  | { ok: true; value: SavedCategoryRow }
+  | {
+      ok: false;
+      errors: CategoryFormErrors;
+      translationErrors?: TranslationFormErrors;
+    }
+> {
+  const errors = validateCategoryDraft(input.draft);
+  if (hasErrors(errors)) return { ok: false, errors };
+
+  if (input.categoryId !== null && !input.draft.isActive) {
+    const liveProducts = await countLiveProductsInCategory(input.categoryId);
+
+    if (!mayDeactivateCategory({ liveProducts })) {
+      return { ok: false, errors: { isActive: CATEGORY_IN_USE_REFUSAL } };
+    }
+  }
+
+  let translations: ReturnType<typeof translationWrite> | undefined;
+
+  if (input.translation) {
+    const existing = input.categoryId
+      ? await getCategoryTranslations(input.categoryId)
+      : null;
+
+    const prepared = prepareTranslation({
+      existing,
+      locale: input.translation.locale,
+      kind: 'category',
+      values: input.translation.values,
+    });
+
+    if (!prepared.ok)
+      return { ok: false, errors: {}, translationErrors: prepared.errors };
+    translations = translationWrite(prepared.value);
+  }
+
+  const write = {
+    name: input.draft.name.trim(),
+    slug: input.draft.slug,
+    description: input.draft.description,
+    position: input.draft.position,
+    isActive: input.draft.isActive,
+    seoTitle: input.draft.seoTitle,
+    seoDescription: input.draft.seoDescription,
+    ...(translations === undefined ? {} : { translations }),
+  };
+
+  const result =
+    input.categoryId === null
+      ? await createCategory(write)
+      : await updateCategory(input.categoryId, write);
+
+  if (!result.ok) {
+    const message = CATEGORY_MESSAGES[result.failure.code];
+
+    if (result.failure.code === 'SLUG_TAKEN') {
+      return { ok: false, errors: { slug: message } };
+    }
+
+    return { ok: false, errors: { form: message } };
+  }
+
+  return { ok: true, value: result.value };
+}
+
+const CATEGORY_MESSAGES: Record<WriteFailure['code'], string> = {
+  ...MESSAGES,
+  SLUG_TAKEN: 'Cette adresse est déjà utilisée par une autre catégorie.',
+  NOT_FOUND: 'Cette catégorie n’existe plus. Rechargez la liste.',
+};
+
+/* ---------------------------------------------------------------------------
+ * Translations
+ * ------------------------------------------------------------------------ */
+
+export type TranslationFormErrors = Record<string, string>;
+
+const TRANSLATION_MESSAGES: Record<TranslationRefusal, string> = {
+  TOO_LONG: 'C’est trop long.',
+  UNKNOWN_FIELD: 'Ce champ ne peut pas être traduit.',
+};
+
+/**
+ * Pull one locale's overlay out of a submitted form.
+ *
+ * The fields arrive as `translations.<locale>.<field>`, which is a flat
+ * namespace a plain `<form>` can post without any client-side assembly. Only
+ * the requested locale is read, and only fields the domain lists as
+ * translatable survive — a crafted `translations.en.basePrice` is dropped here
+ * rather than merged into the column.
+ */
+export function collectTranslation(
+  form: FormData,
+  locale: string,
+  kind: TranslatableKind,
+): Record<string, string> {
+  const prefix = `translations.${locale}.`;
+  const allowed = new Set<string>(Object.keys(TRANSLATABLE_FIELDS[kind]));
+  const values: Record<string, string> = {};
+
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith(prefix) || typeof value !== 'string') continue;
+
+    const field = key.slice(prefix.length);
+    if (allowed.has(field)) values[field] = value;
+  }
+
+  return values;
+}
+
+/**
+ * Check an overlay and fold it into what is already stored.
+ *
+ * Returns the whole column's new value, because that is what a write takes: the
+ * merge keeps every other locale untouched, drops fields that were cleared, and
+ * collapses to `null` once a locale has nothing left in it.
+ */
+export function prepareTranslation(input: {
+  existing: unknown;
+  locale: string;
+  kind: TranslatableKind;
+  values: Readonly<Record<string, string>>;
+}):
+  | { ok: true; value: Record<string, Record<string, string>> | null }
+  | { ok: false; errors: TranslationFormErrors } {
+  const refusals = validateTranslation(input.kind, input.values);
+
+  if (Object.keys(refusals).length > 0) {
+    return {
+      ok: false,
+      errors: Object.fromEntries(
+        Object.entries(refusals).map(([field, code]) => [
+          field,
+          TRANSLATION_MESSAGES[code],
+        ]),
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    value: mergeTranslation(input.existing, input.locale, input.kind, input.values),
+  };
 }

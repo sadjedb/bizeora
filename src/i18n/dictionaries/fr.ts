@@ -152,6 +152,8 @@ export const fr = {
     allProducts: 'Tous les produits',
     theAtelier: 'L’atelier',
     madeToOrder: 'Sur mesure',
+    /** The filled pill in the header. A verb, and short enough for a pill. */
+    startOrder: 'Commander',
   },
 
   footer: {
@@ -178,6 +180,58 @@ export const fr = {
     metaTitle: 'Boutique',
     metaDescription:
       'Pièces brodées prêtes à porter : t-shirts, sweats, polos et accessoires. Chaque pièce peut aussi être personnalisée.',
+
+    /* --- narrowing the catalogue (Phase 14.13) --- */
+
+    searchLabel: 'Rechercher une pièce',
+    searchPlaceholder: 'T-shirt, tote, brodé…',
+    searchAction: 'Rechercher',
+
+    filtersLabel: 'Filtrer le catalogue',
+    categoriesLabel: 'Filtrer par catégorie',
+    allCategories: 'Tout',
+    filterCustomisable: 'Personnalisable',
+    filterInStock: 'Disponible',
+    clearFilters: 'Tout effacer',
+    activeFilters: (n: number) => (n === 1 ? '1 filtre actif' : `${n} filtres actifs`),
+
+    sortLabel: 'Trier par',
+    sortNewest: 'Nouveautés',
+    sortPriceAsc: 'Prix croissant',
+    sortPriceDesc: 'Prix décroissant',
+    sortName: 'Nom (A–Z)',
+
+    countOf: (shown: number, total: number) =>
+      `${shown} ${shown === 1 ? 'pièce' : 'pièces'} sur ${total}`,
+
+    noMatchTitle: 'Aucune pièce ne correspond',
+    noMatchBody:
+      'Essayez moins de mots, ou retirez un filtre. Tout le catalogue est à un clic.',
+    noMatchAction: 'Voir tout le catalogue',
+
+    pagination: 'Pagination',
+    previousPage: 'Page précédente',
+    nextPage: 'Page suivante',
+    goToPage: (n: number) => `Page ${n}`,
+    pageOf: (page: number, total: number) => `Page ${page} sur ${total}`,
+
+    categoryEyebrow: 'Catégorie',
+    categoryMetaTitle: (name: string) => `${name} brodés`,
+    categoryNotFound: 'Catégorie introuvable',
+    backToShop: 'Toute la boutique',
+  },
+
+  /* --- the 3D viewer (Phase 14.15) --- */
+  model: {
+    label: 'Vue 3D du vêtement, orientable',
+    hint: 'Faites glisser pour tourner',
+    loading: 'Chargement du modèle…',
+    failed:
+      'La vue 3D ne s’affiche pas sur cet appareil. Les photos ci-dessus montrent la même pièce.',
+    missingMaterial: (material: string) =>
+      `Le modèle ne contient pas de matière « ${material} ». Corrigez-la dans l’atelier.`,
+    tabPhotos: 'Photos',
+    tab3d: 'Vue 360°',
   },
 
   product: {
@@ -650,6 +704,19 @@ export const fr = {
     uploadingFile: (name: string) => `Envoi de ${name} en cours…`,
     noPreviewNote:
       'Nous ne pouvons pas afficher d’aperçu pour ce type de fichier — le récapitulatif ci-dessous montre exactement ce que nous allons réaliser.',
+
+    /* --- the stitch preview (Phase 16) ---
+     *
+     * The effect is a rendering of the uploaded file, never a change to it:
+     * the copy has to say so, because a customer who believes we have
+     * altered their logo will send it again.
+     */
+    stitchPreviewTitle: 'Aperçu en broderie',
+    stitchPreviewLead:
+      'Voici à quoi ressemble votre design une fois brodé : le fil réduit les couleurs, et chaque point accroche la lumière. Votre fichier n’est pas modifié.',
+    stitchPreviewStitched: 'Brodé',
+    stitchPreviewOriginal: 'Fichier d’origine',
+    stitchPreviewToggle: 'Affichage de l’aperçu',
     embroideryTextLabel: 'Texte à broder',
     embroideryTextHint:
       'Un prénom, un nom d’équipe, une date. Laissez vide si votre design est un fichier.',
@@ -784,7 +851,7 @@ export const fr = {
     amountsIn: (currency: string) => `Montants en ${currency}, sans décimale.`,
     compareAtPrice: (currency: string) => `Prix barré (${currency})`,
     noCategoryBody:
-      'Un produit appartient à une catégorie et il n’en existe aucune. La gestion des catégories n’est pas encore construite ; les catégories actuelles viennent du jeu de données initial.',
+      'Un produit appartient à une catégorie et il n’en existe aucune. Créez-en une depuis Catalogue › Catégories, puis revenez ici.',
     thresholdHint:
       'En dessous de ce nombre, la variante apparaît en alerte. Vide : seuil par défaut.',
     ordersKeepSnapshot:
@@ -837,8 +904,12 @@ export const fr = {
     fieldLimit: 'Nombre d’éléments affichés',
     fieldShowDelivery: 'Afficher les zones de livraison',
     fieldPoints: 'Points',
+    /** The marquee's phrases, one per line — see . */
+    /** The marquee's phrases, one per line — see `marqueeConfig`. */
+    fieldWords: 'Mots défilants (un par ligne)',
     fieldTitle: 'Titre',
     fieldSubtitle: 'Sous-titre',
+    fieldCare: 'Entretien',
     fieldBody: 'Texte',
     fieldButton: 'Bouton',
     fieldDestination: 'Destination',
@@ -859,6 +930,7 @@ export const fr = {
     moveDown: 'Descendre',
     bandBanner: 'Bandeau',
     bandHero: 'Accroche',
+    bandMarquee: 'Bandeau défilant',
     bandHowItWorks: 'Comment ça marche',
     bandCategories: 'Catégories',
     bandFeatured: 'Produits mis en avant',
@@ -966,6 +1038,65 @@ export const fr = {
     newProductLead:
       'Créez la fiche, puis ajoutez ses options, ses variantes et son stock.',
     noCategory: 'Aucune catégorie',
+
+    /* --- categories (Phase 14.13) --- */
+    /* --- 3D models (Phase 14.15) --- */
+    modelHeading: 'Modèle 3D',
+    modelAdd: 'Ajouter un modèle',
+    modelHint: (extension: string, megabytes: number) =>
+      `Un fichier .${extension} autonome, ${megabytes} Mo au maximum. Il est analysé avant d’être stocké : un modèle qui va chercher une image ailleurs est refusé.`,
+    modelChooseMaterial:
+      'Le fichier a été lu sans être stocké. Choisissez la matière sur laquelle la broderie est appliquée.',
+    modelMaterial: 'Matière brodée',
+    modelSuggested: 'suggérée',
+    modelWidthMm: 'Largeur réelle (mm)',
+    modelUpload: 'Attacher le modèle',
+    modelNone: 'Aucun modèle 3D pour ce produit.',
+    modelUnnamed: 'Modèle sans nom',
+    modelInactive: 'Inactif',
+    modelActivate: 'Activer',
+    modelDeactivate: 'Désactiver',
+    modelDelete: 'Supprimer le modèle',
+    modelTooLarge: (megabytes: number) => `Le fichier dépasse ${megabytes} Mo.`,
+
+    navCategories: 'Catégories',
+    fieldCategoryName: 'Nom de la catégorie',
+
+    /* --- translations (Phase 14.14) --- */
+    translationHeading: 'Version anglaise',
+    translationFieldLabel: (label: string, language: string) => `${label} (${language})`,
+    translationProgress: (done: number, total: number) =>
+      total === 0 ? 'rien à traduire' : `${done} / ${total} traduits`,
+    translationHint:
+      'Le texte français est rappelé sous chaque champ. Laissez vide ce que vous ne traduisez pas : le visiteur anglophone verra le français plutôt qu’un blanc.',
+    translationNoSource: 'Rien en français à traduire ici.',
+    translationTooLong: 'C’est trop long.',
+    translationUnknownField: 'Ce champ ne peut pas être traduit.',
+    colTranslated: 'Anglais',
+    categories: 'Catégories',
+    categoriesLead:
+      'Les rayons de la boutique. Chaque catégorie a sa propre page et sa puce dans le catalogue.',
+    newCategory: 'Nouvelle catégorie',
+    newCategoryLead:
+      'Le nom, l’adresse et la place dans la rangée. Les produits s’y rattachent depuis leur propre fiche.',
+    editCategory: 'Modifier la catégorie',
+    fieldSlug: 'Adresse (slug)',
+    fieldCategoryPosition: 'Position',
+    categoryPositionHint:
+      'L’ordre des puces dans le catalogue. Le plus petit nombre passe en premier.',
+    fieldCategoryActive: 'Catégorie visible',
+    categoryActiveHint:
+      'Décochée, elle disparaît du catalogue et sa page renvoie une erreur. Impossible tant qu’elle contient des produits en ligne.',
+    categoryDescriptionHint:
+      'Le texte sous le titre de la page de catégorie. Facultatif, deux lignes suffisent.',
+    createCategory: 'Créer la catégorie',
+    colLiveProducts: 'En ligne',
+    categoryInactive: 'Masquée',
+    noCategoriesTitle: 'Aucune catégorie',
+    noCategoriesBody:
+      'Un produit appartient à une catégorie. Créez-en une avant d’ajouter des produits.',
+    categoryEmptyWarning: 'Cette catégorie ne contient aucun produit en ligne.',
+    viewCategoryOnSite: 'Voir dans la boutique',
     saveRefused: 'Enregistrement refusé',
     actionRefused: 'Action refusée',
     fieldsetIdentity: 'Identité',
@@ -985,7 +1116,11 @@ export const fr = {
     fieldMaterial: 'Matière',
     fieldEmbroideryDetails: 'Détails de broderie',
     fieldsetSeo: 'Référencement',
+    fieldSeoTitle: 'Titre pour les moteurs',
     fieldSeoDescription: 'Description pour les moteurs',
+    seoBlankHint: 'Laissez vide pour reprendre le nom et la description.',
+    saveChanges: 'Enregistrer',
+    changesSaved: 'Modifications enregistrées',
     createProductThenVariants: 'Le produit est créé, puis vous ajoutez ses variantes.',
     ordersUnchanged: 'Les commandes déjà passées ne sont pas modifiées.',
     createProduct: 'Créer le produit',
