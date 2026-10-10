@@ -1,10 +1,16 @@
 # Photography
 
-Every image the storefront shows comes from this folder, and every file in it
-today is a **placeholder**: a flat coloured card with the piece's name written
-across it. They exist so the layouts are exercised with real files at real
-aspect ratios rather than with empty boxes — nothing here pretends to be a
-photograph of anything.
+Every image the storefront shows comes from this folder. Most of it is now
+**real work from the workshop**, taken from the business's Instagram page
+(@bizeora.co): the six gallery pieces, the homepage hero, the polo, and the
+extra photographs (`3.jpg`, `4.jpg`) of the T-shirt and the hoodie. Their
+`1.jpg` and `2.jpg` are the studio shots of the blank garment, front and back —
+they are the surfaces a customer drops a design onto (ADR-035), so they must
+stay straight-on photographs of an unembroidered piece.
+
+What is still a **placeholder** — a flat coloured card with the piece's name
+written across it — is the cap, the beanie, the tote bag and the apron, which
+the Instagram page has no photograph of.
 
 ## How a real photograph replaces one
 
